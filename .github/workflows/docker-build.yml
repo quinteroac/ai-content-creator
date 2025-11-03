@@ -1,13 +1,16 @@
 name: Build Docker Image
 
+# DISABLED - Workflow is currently disabled
+# Uncomment the 'on:' section below to re-enable
 on:
-  push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ main, master ]
+  # push:
+  #   branches: [ main, master ]
+  #   tags:
+  #     - 'v*'
+  # pull_request:
+  #   branches: [ main, master ]
   workflow_dispatch:
+    # Workflow disabled - job has if: false condition
 
 env:
   REGISTRY: ghcr.io
@@ -16,6 +19,7 @@ env:
 jobs:
   build-and-push:
     runs-on: self-hosted
+    if: false  # Disabled - set to true to re-enable
     permissions:
       contents: read
       packages: write
@@ -26,6 +30,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
 
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
@@ -56,6 +63,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
       - name: Image digest
         if: github.event_name != 'pull_request'
