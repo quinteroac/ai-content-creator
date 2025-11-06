@@ -1,3 +1,5 @@
+### IMPORTANT ALL THIS PROJECT WAS VIBE CODING
+
 # Anime Generator - RunPod Template
 
 A powerful web application for iterative anime image generation using ComfyUI. This application provides an intuitive interface for creating anime-style images through an interactive step-by-step process or direct prompt generation.
