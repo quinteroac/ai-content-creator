@@ -77,7 +77,15 @@ class CivitAIDownloader:
     def determine_model_type(self, model_info: Dict) -> str:
         """Determine model type from CivitAI model info"""
         model_type = model_info.get('type', '')
-        return MODEL_DIRS.get(model_type, 'checkpoints')
+        target_dir = MODEL_DIRS.get(model_type, 'checkpoints')
+        
+        # Allow overriding target directory via environment variable
+        if model_type:
+            override_key = f"CIVITAI_DIR_OVERRIDE_{model_type.upper().replace(' ', '_')}"
+            override_value = os.environ.get(override_key)
+            if override_value:
+                target_dir = override_value
+        return target_dir
     
     def download_file(self, url: str, destination: Path, model_name: str, progress_callback=None) -> bool:
         """Download a file from URL to destination"""

@@ -56,10 +56,10 @@
                 <div class="video-preview-body">
                     <div 
                         v-if="previewMode === 'image'"
-                        :class="['video-source-preview', (videoSourceImage && videoSourceImage.filename) ? 'has-image' : 'is-empty']"
+                        :class="['video-source-preview', (videoSourceImage && (videoSourceImage.filename || videoSourceImage.dataUrl)) ? 'has-image' : 'is-empty']"
                         :style="imageContainerStyle"
                     >
-                        <template v-if="videoSourceImage && videoSourceImage.filename">
+                        <template v-if="videoSourceImage && (videoSourceImage.filename || videoSourceImage.dataUrl)">
                             <div class="video-source-aspect" :style="{ paddingBottom: imageAspectRatioPadding }">
                                 <img 
                                     :src="imageUrl"

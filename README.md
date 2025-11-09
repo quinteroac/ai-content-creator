@@ -26,13 +26,13 @@ A powerful web application for iterative anime image generation using ComfyUI. T
   - Prevents duplicate tag suggestions
 
 - **AI-powered prompt enrichment**: Optional OpenAI integration to enhance prompts
-- **Progressive generation**: Generate previews at 25 steps for intermediate steps, final image at 50 steps
+- **Progressive generation**: Uses a unified 20-step inference by default across the interactive flow
 - **Seed management**: Consistent seed across all steps in interactive mode
 
 ### Direct Generation Mode
 - **Quick generation**: Direct prompt input for immediate image generation
 - **Random seed**: Each generation uses a new random seed
-- **Full quality**: Always generates at 50 steps
+- **Full quality**: Default inference runs at 20 steps
 
 ### Additional Features
 - **Multiple aspect ratios**: Square (1024x1024), Portrait (823x1216), Landscape (1216x823)
@@ -126,8 +126,7 @@ The application will automatically connect to the external ComfyUI instance.
    - Click "Renew Tags" to load more tag suggestions
    - Press Enter or click the Generate button to proceed
 3. **Generate images**:
-   - Intermediate steps generate previews at 25 steps
-   - Final step generates the full-quality image at 50 steps
+   - Intermediate and final steps use the configured inference count (20 by default)
    - Seed remains constant throughout the flow
 
 ### Direct Mode
@@ -135,7 +134,7 @@ The application will automatically connect to the external ComfyUI instance.
 1. **Toggle to Direct Mode** using the mode selector
 2. **Enter your complete prompt** in the textarea
 3. **Select aspect ratio** (Square, Portrait, Landscape)
-4. **Generate** - images are always generated at 50 steps with a random seed
+4. **Generate** - images default to 20 steps with a random seed
 
 ### AI Enrichment
 
@@ -165,7 +164,7 @@ Enable the AI enrichment toggle to automatically enhance your prompts using Open
 │   └── tags.csv            # Tag database (800,000+ tags)
 └── workflows/
     └── text-to-image/
-        └── text-to-image-lumina.json  # ComfyUI workflow
+        └── text-to-image-illustrious.json  # ComfyUI workflow
 ```
 
 ## 🔧 Technical Details

@@ -23,7 +23,31 @@ const VIDEO_PRESETS = {
 createApp({
     data() {
         const initial = window.__VIDEO_PAGE_DATA__ || {};
-        const rawResolution = (initial.resolution || '').toString().toLowerCase();
+        let sessionImage = null;
+        let sessionPrompt = null;
+        let sessionResolution = null;
+
+        try {
+            const storedImage = sessionStorage.getItem('video_source_image');
+            if (storedImage) {
+                sessionImage = JSON.parse(storedImage);
+            }
+        } catch (error) {
+            console.warn('Unable to parse stored video source image:', error);
+        }
+
+        try {
+            sessionPrompt = sessionStorage.getItem('video_source_prompt') || null;
+            sessionResolution = sessionStorage.getItem('video_source_resolution') || null;
+        } catch (error) {
+            sessionPrompt = null;
+            sessionResolution = null;
+        }
+
+        sessionStorage.removeItem('video_source_image');
+        sessionStorage.removeItem('video_source_prompt');
+        sessionStorage.removeItem('video_source_resolution');
+        const rawResolution = (sessionResolution || initial.resolution || '').toString().toLowerCase();
 
         let initialOrientation = VIDEO_PRESET_ORDER.find((key) => key === rawResolution);
         if (!initialOrientation) {
@@ -41,12 +65,12 @@ createApp({
         }
 
         return {
-            videoSourceImage: {
+            videoSourceImage: sessionImage || {
                 filename: initial.filename || '',
                 subfolder: initial.subfolder || '',
                 type: initial.imageType || 'output'
             },
-            videoPrompt: initial.prompt || '',
+            videoPrompt: sessionPrompt !== null ? sessionPrompt : (initial.prompt || ''),
             selectedOrientation: initialOrientation,
             isGeneratingVideo: false,
             videoResults: [],
@@ -56,7 +80,13 @@ createApp({
     },
     computed: {
         imageUrl() {
-            if (!this.videoSourceImage || !this.videoSourceImage.filename) {
+            if (!this.videoSourceImage) {
+                return '';
+            }
+            if (this.videoSourceImage.dataUrl) {
+                return this.videoSourceImage.dataUrl;
+            }
+            if (!this.videoSourceImage.filename) {
                 return '';
             }
             const subfolder = this.videoSourceImage.subfolder || '';
@@ -98,7 +128,7 @@ createApp({
             return `${width}px`;
         },
         imageContainerStyle() {
-            if (this.videoSourceImage && this.videoSourceImage.filename) {
+            if (this.videoSourceImage && (this.videoSourceImage.filename || this.videoSourceImage.dataUrl)) {
                 return {
                     width: this.imageAspectMaxWidth,
                     maxWidth: '100%'
@@ -143,7 +173,7 @@ createApp({
                 this.videoError = 'Please provide a prompt to generate the video.';
                 return;
             }
-            if (!this.videoSourceImage || !this.videoSourceImage.filename) {
+            if (!this.videoSourceImage || (!this.videoSourceImage.filename && !this.videoSourceImage.dataUrl)) {
                 this.videoError = 'Source image is missing.';
                 return;
             }
@@ -157,6 +187,37 @@ createApp({
                 const [widthString, heightString] = resolution.split('x');
                 const width = parseInt(widthString, 10) || 560;
                 const height = parseInt(heightString, 10) || 560;
+
+                if (this.videoSourceImage.dataUrl && !this.videoSourceImage.filename) {
+                    try {
+                        const uploadResponse = await fetch('/api/upload-image-data', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                data_url: this.videoSourceImage.dataUrl,
+                                filename: this.videoSourceImage.filename || this.videoSourceImage.original_name || 'upload.png',
+                                mime_type: this.videoSourceImage.mimeType || 'image/png'
+                            })
+                        });
+
+                        const uploadData = await uploadResponse.json();
+                        if (uploadResponse.ok && uploadData.success && uploadData.image) {
+                            this.videoSourceImage = {
+                                filename: uploadData.image.filename,
+                                subfolder: uploadData.image.subfolder || '',
+                                type: uploadData.image.type || 'input'
+                            };
+                        } else {
+                            throw new Error(uploadData.error || 'Unable to upload source image.');
+                        }
+                    } catch (error) {
+                        this.videoError = error.message || 'Unable to upload source image.';
+                        this.isGeneratingVideo = false;
+                        return;
+                    }
+                }
 
                 const response = await fetch('/api/generate-video', {
                     method: 'POST',

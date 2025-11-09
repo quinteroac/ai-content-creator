@@ -82,9 +82,9 @@
                                     </svg>
                                 </button>
                                 <a 
-                                    :href="getImageUrl(image) + '&download=1'"
+                                    :href="image.dataUrl ? image.dataUrl : getImageUrl(image) + '&download=1'"
                                     class="download-btn"
-                                    :download="image.filename"
+                                    :download="image.filename || 'image.png'"
                                     @click.stop
                                     title="Download"
                                 >
@@ -134,8 +134,9 @@
             
             <!-- Contenedor unificado para ambos modos -->
             <div class="prompt-textfield-container">
-                <!-- Botón Nuevo Prompt (dentro del textfield, izquierda) -->
+                <!-- Botón Nuevo Prompt / Adjuntar (dentro del textfield, izquierda) -->
                 <button 
+                    v-if="!isEditMode"
                     class="prompt-control-btn new-prompt-inline"
                     @click="startNewPrompt()"
                     :disabled="isGenerating || isImproving"
@@ -145,6 +146,24 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
                 </button>
+                <button 
+                    v-else
+                    class="prompt-control-btn attach-btn-inline"
+                    @click="triggerImageUpload"
+                    :disabled="isGenerating || isImproving || isUploadingImage"
+                    title="Attach Image"
+                >
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 7.5v9a4.5 4.5 0 01-9 0v-9a3 3 0 016 0v9a1.5 1.5 0 01-3 0V7.5"></path>
+                    </svg>
+                </button>
+                <input 
+                    ref="imageUploader"
+                    type="file"
+                    class="hidden-file-input"
+                    accept="image/*"
+                    @change="handleImageUpload"
+                />
                 
                 <!-- Botón Generar (dentro del textfield, derecha) -->
                 <button 
@@ -226,6 +245,15 @@
                     
                     <!-- Aspect Ratio Select (lado derecho) -->
                     <div class="prompt-controls-right">
+                        <select 
+                            v-model="generationMode" 
+                            class="generation-mode-select" 
+                            :disabled="isGenerating || isImproving"
+                            title="Generation Mode"
+                        >
+                            <option value="generate">Generate</option>
+                            <option value="edit">Edit</option>
+                        </select>
                         <input 
                             type="number"
                             v-model.number="selectedSteps"

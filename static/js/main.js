@@ -20,7 +20,8 @@ createApp({
             promptParts: {},
             currentInput: '',
             selectedResolution: '960x960',
-            selectedSteps: 50, // Pasos de inferencia por defecto
+            selectedSteps: 20, // Pasos de inferencia por defecto
+            generationMode: 'generate', // Modo de generación (generate/edit)
             isGenerating: false,
             modalImage: null,
             messageIdCounter: 0,
@@ -37,7 +38,8 @@ createApp({
             displayedTags: [], // Tags mostrados actualmente (máximo 5)
             tagsIndex: 0, // Índice para saber cuántos tags hemos mostrado
             allDisplayedTags: new Set(), // Todos los tags que ya se han mostrado (incluyendo los anteriores)
-            tagsVisible: true // Control de visibilidad de los tags
+            tagsVisible: true, // Control de visibilidad de los tags
+            isUploadingImage: false // Estado de carga de imágenes en modo edición
         };
     },
     computed: {
@@ -46,6 +48,9 @@ createApp({
                 return this.steps[this.currentStep];
             }
             return null;
+        },
+        isEditMode() {
+            return this.generationMode === 'edit';
         },
         currentPlaceholder() {
             if (this.isFlowComplete) {
@@ -153,6 +158,12 @@ createApp({
                 this.displayedTags = [];
                 this.tagsIndex = 0;
             }
+        },
+        generationMode(newMode) {
+            if (newMode === 'edit') {
+                this.currentPrompt = '';
+                this.directPrompt = '';
+            }
         }
     },
     methods: {
@@ -253,8 +264,9 @@ createApp({
                     }
                 }
                 
-                // Concatenar el nuevo prompt con el prompt anterior (si existe)
-                if (this.currentPrompt && this.currentPrompt.trim()) {
+                if (this.isEditMode) {
+                    this.currentPrompt = promptToAdd.trim();
+                } else if (this.currentPrompt && this.currentPrompt.trim()) {
                     // Agregar el nuevo prompt al prompt acumulado
                     this.currentPrompt = (this.currentPrompt.trim() + ' ' + promptToAdd.trim()).trim();
                 } else {
@@ -262,7 +274,7 @@ createApp({
                     this.currentPrompt = promptToAdd.trim();
                 }
                 
-                // Generar imagen con el prompt concatenado (modo directo usa selectedSteps)
+                // Generar imagen con el prompt actual
                 await this.generateImages(this.selectedSteps);
                 
                 // Limpiar solo el textarea (no el currentPrompt) y restaurar el focus para continuar el chat
@@ -426,7 +438,7 @@ createApp({
             return Math.floor(Math.random() * 4294967296);
         },
         
-        async generateImages(steps = 50, seed = null, allowEmptyPrompt = false) {
+        async generateImages(steps = 20, seed = null, allowEmptyPrompt = false) {
             // Verificar si hay prompt o si está permitido generar con prompt vacío
             const hasPrompt = this.currentPrompt && this.currentPrompt.trim().replace(/,/g, '').trim().length > 0;
             if (!hasPrompt && !allowEmptyPrompt) {
@@ -472,6 +484,35 @@ createApp({
             this.isGenerating = true;
             
             try {
+                let lastImagePayload = null;
+                if (this.isEditMode) {
+                    const lastImage = this.getLastGeneratedImage();
+                    if (!lastImage) {
+                        const messageIndex = this.chatMessages.findIndex(m => m.id === messageId);
+                        if (messageIndex !== -1) {
+                            this.chatMessages[messageIndex].response = {
+                                loading: false,
+                                images: [],
+                                error: 'Edit mode requires a previously generated image.'
+                            };
+                        }
+                        return;
+                    }
+                    if (lastImage.dataUrl) {
+                        lastImagePayload = {
+                            data_url: lastImage.dataUrl,
+                            filename: lastImage.filename || lastImage.original_name || 'attachment.png',
+                            mime_type: lastImage.mimeType || 'image/png'
+                        };
+                    } else {
+                        lastImagePayload = {
+                            filename: lastImage.filename,
+                            subfolder: lastImage.subfolder || '',
+                            type: lastImage.type || 'output'
+                        };
+                    }
+                }
+
                 // Obtener la resolución seleccionada
                 const [width, height] = this.selectedResolution.split('x').map(Number);
                 
@@ -485,7 +526,9 @@ createApp({
                         width: width,
                         height: height,
                         steps: steps,
-                        seed: seedToUse
+                        seed: seedToUse,
+                        mode: this.generationMode,
+                        image: lastImagePayload
                     })
                 });
                 
@@ -585,7 +628,13 @@ createApp({
         },
         
         getMediaUrl(media) {
-            if (!media || !media.filename) {
+            if (!media) {
+                return '';
+            }
+            if (media.dataUrl) {
+                return media.dataUrl;
+            }
+            if (!media.filename) {
                 return '';
             }
             const subfolder = media.subfolder || '';
@@ -597,18 +646,168 @@ createApp({
             return this.getMediaUrl(image);
         },
 
-        openVideoGenerator(image) {
-            if (!image || !image.filename) {
+        triggerImageUpload() {
+            if (this.isGenerating || this.isImproving || this.isUploadingImage) {
                 return;
             }
+            if (this.$refs.imageUploader) {
+                this.$refs.imageUploader.value = '';
+                this.$refs.imageUploader.click();
+            }
+        },
+
+        async handleImageUpload(event) {
+            const file = event.target?.files?.[0];
+            if (!file) {
+                if (event.target) {
+                    event.target.value = '';
+                }
+                return;
+            }
+
+            this.isUploadingImage = true;
+            const messageId = ++this.messageIdCounter;
+
+            const finalize = () => {
+                this.isUploadingImage = false;
+                if (event.target) {
+                    event.target.value = '';
+                }
+            };
+
+            try {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const dataUrl = reader.result;
+                    if (!dataUrl) {
+                        this.chatMessages.push({
+                            id: messageId,
+                            userMessage: `Attachment failed: ${file.name}`,
+                            response: {
+                                loading: false,
+                                images: [],
+                                error: 'Unable to read image data.'
+                            }
+                        });
+                        finalize();
+                        return;
+                    }
+
+                    const imagePayload = {
+                        filename: file.name || 'attachment.png',
+                        dataUrl,
+                        mimeType: file.type || 'image/png',
+                        isLocal: true,
+                        type: 'input'
+                    };
+
+                    this.chatMessages.push({
+                        id: messageId,
+                        userMessage: `Attached image: ${file.name}`,
+                        response: {
+                            loading: false,
+                            images: [imagePayload],
+                            error: null
+                        }
+                    });
+
+                    finalize();
+                };
+
+                reader.onerror = () => {
+                    this.chatMessages.push({
+                        id: messageId,
+                        userMessage: `Attachment failed: ${file.name}`,
+                        response: {
+                            loading: false,
+                            images: [],
+                            error: 'Unable to read image file.'
+                        }
+                    });
+                    finalize();
+                };
+
+                reader.readAsDataURL(file);
+            } catch (error) {
+                this.chatMessages.push({
+                    id: messageId,
+                    userMessage: `Attachment failed: ${file.name}`,
+                    response: {
+                        loading: false,
+                        images: [],
+                        error: `Error attaching image: ${error.message}`
+                    }
+                });
+                finalize();
+            }
+        },
+
+        getLastGeneratedImage() {
+            for (let i = this.chatMessages.length - 1; i >= 0; i--) {
+                const responses = this.chatMessages[i]?.response;
+                if (responses && responses.images && responses.images.length > 0) {
+                    return responses.images[responses.images.length - 1];
+                }
+            }
+            return null;
+        },
+
+        async openVideoGenerator(image) {
+            if (!image) {
+                return;
+            }
+
+            const basePrompt = (this.currentPrompt && this.currentPrompt.trim())
+                || (this.directPrompt && this.directPrompt.trim())
+                || '';
+
+            if (image.dataUrl) {
+                try {
+                    const payload = {
+                        dataUrl: image.dataUrl,
+                        filename: image.filename || image.original_name || 'upload.png',
+                        mimeType: image.mimeType || 'image/png'
+                    };
+                    sessionStorage.setItem('video_source_image', JSON.stringify(payload));
+                    sessionStorage.setItem('video_source_prompt', basePrompt || '');
+                    sessionStorage.setItem('video_source_resolution', this.selectedResolution || '');
+                } catch (error) {
+                    console.warn('Unable to store video source image in sessionStorage:', error);
+                    this.chatMessages.push({
+                        id: ++this.messageIdCounter,
+                        userMessage: 'Video generation error',
+                        response: {
+                            loading: false,
+                            images: [],
+                            error: 'Unable to store image for video generation.'
+                        }
+                    });
+                    return;
+                }
+
+                const params = new URLSearchParams();
+                params.set('source', 'local');
+                params.set('resolution', this.selectedResolution);
+                if (basePrompt) {
+                    params.set('prompt', basePrompt);
+                }
+                window.location.href = `/video?${params.toString()}`;
+                return;
+            }
+
+            sessionStorage.removeItem('video_source_image');
+            sessionStorage.removeItem('video_source_prompt');
+            sessionStorage.removeItem('video_source_resolution');
+
+            if (!image.filename) {
+                return;
+            }
+
             const params = new URLSearchParams({
                 filename: image.filename,
                 subfolder: image.subfolder || '',
                 type: image.type || 'output'
             });
-            const basePrompt = (this.currentPrompt && this.currentPrompt.trim())
-                || (this.directPrompt && this.directPrompt.trim())
-                || '';
             if (basePrompt) {
                 params.set('prompt', basePrompt);
             }

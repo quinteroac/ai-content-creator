@@ -17,6 +17,9 @@ ANIME_GENERATOR_PORT=${ANIME_GENERATOR_PORT:-5000}
 ANIME_GENERATOR_HOST=${ANIME_GENERATOR_HOST:-0.0.0.0}
 COMFYUI_HOST=${COMFYUI_HOST:-127.0.0.1}
 COMFYUI_PORT=${COMFYUI_PORT:-8188}
+ENABLE_EDIT=${ENABLE_EDIT:-true}
+ENABLE_VIDEO=${ENABLE_VIDEO:-true}
+ILLUSTRIOUS_CHKP=${ILLUSTRIOUS_CHKP:-1162518}
 
 # Check if CUDA is available
 if command -v nvidia-smi &> /dev/null; then
@@ -32,82 +35,103 @@ if ! command -v python &> /dev/null; then
     exit 1
 fi
 
-# Download NetaYume Lumina model if not exists
-NETAYUME_MODEL_ID=${NETAYUME_MODEL_ID:-"1790792"}
-NETAYUME_MODEL_FILE="netayumeLuminaNetaLumina_v35Pretrained.safetensors"
-CHECKPOINTS_DIR="/app/ComfyUI/models/checkpoints"
-NETAYUME_MODEL_PATH="${CHECKPOINTS_DIR}/${NETAYUME_MODEL_FILE}"
+# Helper functions
+download_with_wget() {
+    local url="$1"
+    local destination="$2"
+    local name="$3"
 
-# Check if model already exists (exact filename or similar)
-MODEL_EXISTS=false
-if [ -f "$NETAYUME_MODEL_PATH" ]; then
-    MODEL_EXISTS=true
-elif ls "${CHECKPOINTS_DIR}"/netayume*.safetensors 1> /dev/null 2>&1; then
-    MODEL_EXISTS=true
-    echo "Found NetaYume model with similar name"
-fi
-
-if [ "$MODEL_EXISTS" = false ]; then
-    echo "NetaYume Lumina model not found. Downloading from CivitAI..."
-    echo "Model ID: ${NETAYUME_MODEL_ID}"
-    echo "Note: You can set NETAYUME_MODEL_ID environment variable to use a different model ID"
-    cd /app
-    # Pass CIVITAI_API_KEY if set, otherwise pass empty string
-    CIVITAI_API_KEY_ARG="${CIVITAI_API_KEY:-}"
-    python civitai_downloader.py ${NETAYUME_MODEL_ID} "" "${CIVITAI_API_KEY_ARG}"
-    
-    # Check if download was successful (check for exact filename or similar)
-    if [ -f "$NETAYUME_MODEL_PATH" ]; then
-        echo "✓ NetaYume Lumina model downloaded successfully"
-    elif ls "${CHECKPOINTS_DIR}"/netayume*.safetensors 1> /dev/null 2>&1; then
-        echo "✓ NetaYume Lumina model downloaded successfully (different filename)"
-    else
-        echo "Warning: NetaYume Lumina model download may have failed."
-        echo "Expected file: $NETAYUME_MODEL_PATH"
-        echo "You can download it manually using the CivitAI downloader at port ${CIVITAI_PORT}"
-        echo "Or set the correct model ID using: NETAYUME_MODEL_ID=<model_id>"
+    if [ -f "$destination" ]; then
+        echo "✓ $name already exists at $destination"
+        return 0
     fi
-else
-    echo "✓ NetaYume Lumina model already exists"
-fi
 
-# Download LoRA detailer if not exists
-LORA_DETAILER_ID=${LORA_DETAILER_ID:-"1974130"}
-LORA_DETAILER_FILE="reakaaka_enhancement_bundle_NetaYumev35_v0.37.2.safetensors"
-LORAS_DIR="/app/ComfyUI/models/loras"
-LORA_DETAILER_PATH="${LORAS_DIR}/${LORA_DETAILER_FILE}"
-
-# Check if LoRA already exists (exact filename or similar)
-LORA_EXISTS=false
-if [ -f "$LORA_DETAILER_PATH" ]; then
-    LORA_EXISTS=true
-elif ls "${LORAS_DIR}"/reakaaka*.safetensors 1> /dev/null 2>&1; then
-    LORA_EXISTS=true
-    echo "Found LoRA detailer with similar name"
-fi
-
-if [ "$LORA_EXISTS" = false ]; then
-    echo "LoRA detailer not found. Downloading from CivitAI..."
-    echo "LoRA ID: ${LORA_DETAILER_ID}"
-    echo "Note: You can set LORA_DETAILER_ID environment variable to use a different LoRA ID"
-    cd /app
-    # Pass CIVITAI_API_KEY if set, otherwise pass empty string
-    CIVITAI_API_KEY_ARG="${CIVITAI_API_KEY:-}"
-    python civitai_downloader.py ${LORA_DETAILER_ID} "" "${CIVITAI_API_KEY_ARG}"
-    
-    # Check if download was successful (check for exact filename or similar)
-    if [ -f "$LORA_DETAILER_PATH" ]; then
-        echo "✓ LoRA detailer downloaded successfully"
-    elif ls "${LORAS_DIR}"/reakaaka*.safetensors 1> /dev/null 2>&1; then
-        echo "✓ LoRA detailer downloaded successfully (different filename)"
+    mkdir -p "$(dirname "$destination")"
+    echo "Downloading $name..."
+    if wget -O "$destination" "$url"; then
+        echo "✓ Downloaded $name"
     else
-        echo "Warning: LoRA detailer download may have failed."
-        echo "Expected file: $LORA_DETAILER_PATH"
-        echo "You can download it manually using the CivitAI downloader at port ${CIVITAI_PORT}"
-        echo "Or set the correct LoRA ID using: LORA_DETAILER_ID=<lora_id>"
+        echo "✗ Failed to download $name from $url"
+        rm -f "$destination"
+        return 1
     fi
+}
+
+download_from_civitai() {
+    local model_id="$1"
+    local version_id="$2"
+    local name="$3"
+    local override="$4"
+    local api_key_arg="${CIVITAI_API_KEY:-}"
+
+    echo "Ensuring $name (CivitAI ID: $model_id${version_id:+, Version: $version_id})..."
+    if CIVITAI_DIR_OVERRIDE_CHECKPOINT="${override:-}" python /app/civitai_downloader.py "$model_id" "$version_id" "$api_key_arg"; then
+        echo "✓ $name ready"
+    else
+        echo "✗ Failed to download $name (ID: $model_id${version_id:+, Version: $version_id})"
+    fi
+}
+
+MODELS_ROOT="/app/ComfyUI/models"
+
+echo "=== Preparing Illustrious checkpoint ==="
+download_from_civitai "$ILLUSTRIOUS_CHKP" "" "Illustrious checkpoint"
+
+if [[ "${ENABLE_EDIT,,}" == "true" ]]; then
+    echo "=== Preparing Qwen Edit assets ==="
+    download_with_wget \
+        "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors" \
+        "${MODELS_ROOT}/vae/qwen_image_vae.safetensors" \
+        "Qwen VAE"
+
+    download_with_wget \
+        "https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors" \
+        "${MODELS_ROOT}/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors" \
+        "Qwen diffusion model"
+
+    download_with_wget \
+        "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
+        "${MODELS_ROOT}/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
+        "Qwen text encoder"
+
+    download_with_wget \
+        "https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors" \
+        "${MODELS_ROOT}/loras/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors" \
+        "Qwen Lightning LoRA"
+
+    download_from_civitai "2097058" "" "Qwen LoRA (2097058)"
+    download_from_civitai "1906441" "" "Qwen LoRA (1906441)"
+    download_from_civitai "1662740" "" "Qwen LoRA (1662740)"
 else
-    echo "✓ LoRA detailer already exists"
+    echo "ENABLE_EDIT set to false. Skipping Qwen Edit downloads."
+fi
+
+if [[ "${ENABLE_VIDEO,,}" == "true" ]]; then
+    echo "=== Preparing WAN assets ==="
+    download_with_wget \
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors" \
+        "${MODELS_ROOT}/vae/wan_2.1_vae.safetensors" \
+        "WAN VAE"
+
+    download_with_wget \
+        "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors" \
+        "${MODELS_ROOT}/clip/nsfw_wan_umt5-xxl_fp8_scaled.safetensors" \
+        "WAN CLIP"
+
+    download_with_wget \
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors" \
+        "${MODELS_ROOT}/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors" \
+        "WAN High Noise LoRA"
+
+    download_with_wget \
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors" \
+        "${MODELS_ROOT}/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors" \
+        "WAN Low Noise LoRA"
+
+    download_from_civitai "2342708" "2342708" "WAN diffusion model (high)" "diffusion_models"
+    download_from_civitai "2342708" "2342740" "WAN diffusion model (low)" "diffusion_models"
+else
+    echo "ENABLE_VIDEO set to false. Skipping WAN downloads."
 fi
 
 # Start CivitAI downloader web interface in background

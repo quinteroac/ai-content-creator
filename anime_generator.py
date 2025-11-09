@@ -10,12 +10,15 @@ import json
 import uuid
 import time
 import threading
+import base64
+import mimetypes
 import websocket
 import requests
 import random
 import csv
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)  # Permitir CORS para que el frontend pueda hacer requests
@@ -110,8 +113,8 @@ WS_PROTOCOL = "wss" if COMFYUI_URL.startswith("https") else "ws"
 # Almacenar estados de generación
 generation_status = {}
 
-# Cargar workflow de Lumina desde archivo JSON
-def load_workflow(workflow_path):
+# Cargar workflow desde archivo JSON
+def load_workflow(workflow_path, default_relative=None):
     """Cargar workflow desde archivo JSON"""
     try:
         # Intentar rutas relativas y absolutas
@@ -119,14 +122,15 @@ def load_workflow(workflow_path):
         possible_paths = [
             workflow_path,  # Ruta absoluta o relativa al directorio actual
             os.path.join(script_dir, workflow_path),  # Relativa al script
-            os.path.join(script_dir, 'workflows', 'text-to-image', 'text-to-image-lumina.json')  # Ruta por defecto
         ]
+        if default_relative:
+            possible_paths.append(os.path.join(script_dir, default_relative))
         
         for path in possible_paths:
             if os.path.exists(path):
                 with open(path, 'r', encoding='utf-8') as f:
                     workflow = json.load(f)
-                    print(f"✓ Workflow cargado desde: {path}")
+                    print(f"[OK] Workflow cargado desde: {path}")
                     return workflow
         
         raise FileNotFoundError(f"Workflow no encontrado en ninguna de las rutas: {possible_paths}")
@@ -134,14 +138,22 @@ def load_workflow(workflow_path):
         print(f"Error cargando workflow: {e}")
         raise
 
-# Cargar workflow base de Lumina
-WORKFLOW_PATH = os.environ.get('LUMINA_WORKFLOW_PATH', 'workflows/text-to-image/text-to-image-lumina.json')
+# Cargar workflow base de Illustrious por defecto
+WORKFLOW_PATH = os.environ.get('LUMINA_WORKFLOW_PATH', 'workflows/text-to-image/text-to-image-illustrious.json')
 VIDEO_WORKFLOW_PATH = os.environ.get('VIDEO_WORKFLOW_PATH', 'workflows/image-to-video/video_wan2_2_14B_i2v_remix.json')
+EDIT_WORKFLOW_PATH = os.environ.get('EDIT_WORKFLOW_PATH', 'workflows/edit-image/edit-image-qwen-2509.json')
 try:
-    BASE_WORKFLOW = load_workflow(WORKFLOW_PATH)
+    BASE_WORKFLOW = load_workflow(WORKFLOW_PATH, 'workflows/text-to-image/text-to-image-illustrious.json')
 except Exception as e:
-    print(f"Error fatal: No se pudo cargar el workflow de Lumina: {e}")
-    print("Asegúrate de que el archivo workflows/text-to-image/text-to-image-lumina.json existe")
+    print(f"Error fatal: No se pudo cargar el workflow de Illustrious: {e}")
+    print("Asegúrate de que el archivo workflows/text-to-image/text-to-image-illustrious.json existe")
+    sys.exit(1)
+
+try:
+    EDIT_WORKFLOW = load_workflow(EDIT_WORKFLOW_PATH, 'workflows/edit-image/edit-image-qwen-2509.json')
+except Exception as e:
+    print(f"Error fatal: No se pudo cargar el workflow de edición: {e}")
+    print("Asegúrate de que el archivo workflows/edit-image/edit-image-qwen-2509.json existe")
     sys.exit(1)
 
 def queue_prompt(workflow, client_id=str(uuid.uuid4())):
@@ -166,7 +178,7 @@ def queue_prompt(workflow, client_id=str(uuid.uuid4())):
 
 def get_media_outputs(prompt_id, target_nodes=None, media_key="images"):
     """Obtener archivos generados (imágenes, videos, etc.) para un prompt_id específico"""
-    target_nodes = target_nodes or ["9"]
+    target_nodes = target_nodes or ["19"]
     possible_keys = [media_key]
     if media_key == "videos":
         possible_keys.extend(["video", "files", "images"])  # ComfyUI variations
@@ -268,11 +280,11 @@ def get_media_outputs(prompt_id, target_nodes=None, media_key="images"):
 
 def get_image_filename(prompt_id):
     """Compatibilidad hacia atrás para obtener imágenes generadas"""
-    return get_media_outputs(prompt_id, target_nodes=["9"], media_key="images")
+    return get_media_outputs(prompt_id, target_nodes=["19"], media_key="images")
 
 def wait_for_completion(client_id, prompt_id, max_wait=300, target_nodes=None, media_key="images"):
     """Esperar a que se complete la generación y obtener los archivos solicitados"""
-    target_nodes = target_nodes or ["9"]
+    target_nodes = target_nodes or ["19"]
     media_items = []
     execution_completed = False
     
@@ -472,41 +484,119 @@ def upload_image_to_comfy(filename, subfolder='', image_type='output'):
 
     return upload_name
 
-def generate_images(positive_prompt, negative_prompt=None, width=1024, height=1024, steps=50, seed=None):
+
+def upload_image_bytes_to_comfy(content_bytes, filename='upload.png', mime_type='image/png', image_type='input'):
+    """Subir bytes de imagen directamente a ComfyUI"""
+    if not content_bytes:
+        raise ValueError("Empty image content provided")
+
+    base_name = secure_filename(os.path.basename(filename)) or "upload.png"
+    extension = os.path.splitext(base_name)[1]
+    if not extension:
+        guessed_ext = mimetypes.guess_extension(mime_type or '')
+        extension = guessed_ext if guessed_ext else '.png'
+        base_name = f"{base_name}{extension}"
+
+    upload_name = f"user_upload_{uuid.uuid4().hex}{extension}"
+
+    upload_response = requests.post(
+        f"{COMFYUI_URL}/upload/image",
+        data={'type': image_type, 'overwrite': 'true'},
+        files={'image': (upload_name, content_bytes, mime_type or 'image/png')},
+        timeout=60
+    )
+
+    if upload_response.status_code != 200:
+        raise ValueError(f"Unable to upload provided image: HTTP {upload_response.status_code}")
+
+    return upload_name
+
+
+def upload_image_data_url_to_comfy(data_url, filename='upload.png', mime_type_override=None):
+    """Convertir un data URL a bytes y subirlo a ComfyUI"""
+    if not data_url or ',' not in data_url:
+        raise ValueError("Invalid image data URL")
+
+    header, encoded = data_url.split(',', 1)
+    mime_type = 'image/png'
+    if header.startswith('data:'):
+        mime_section = header[5:]
+        if ';' in mime_section:
+            mime_type = mime_section.split(';', 1)[0] or 'image/png'
+        else:
+            mime_type = mime_section or 'image/png'
+    if mime_type_override:
+        mime_type = mime_type_override
+
+    try:
+        content_bytes = base64.b64decode(encoded)
+    except Exception as exc:
+        raise ValueError(f"Invalid base64 image content: {exc}") from exc
+
+    return upload_image_bytes_to_comfy(content_bytes, filename=filename, mime_type=mime_type, image_type='input')
+
+def generate_images(positive_prompt, negative_prompt=None, width=1024, height=1024, steps=20, seed=None):
     """Generar imágenes usando ComfyUI"""
     client_id = str(uuid.uuid4())
     
     # Crear workflow con el prompt proporcionado
-    workflow = BASE_WORKFLOW.copy()
-    
-    # Actualizar el prompt positivo
-    base_positive = workflow["6"]["inputs"]["text"]
-    # Extraer solo la parte del prompt original y agregar el nuevo
-    if "<Prompt Start>" in base_positive:
-        parts = base_positive.split("<Prompt Start>")
-        new_positive = parts[0] + "<Prompt Start> Digital anime illustration " + positive_prompt
+    workflow = json.loads(json.dumps(BASE_WORKFLOW))
+
+    # Actualizar prompts positivos (nodos 6 y 15)
+    positive_nodes = ["6", "15"]
+    base_positive = ""
+    for node_id in positive_nodes:
+        base_positive = workflow.get(node_id, {}).get("inputs", {}).get("text", "")
+        if base_positive:
+            break
+
+    if base_positive:
+        if "<Prompt Start>" in base_positive:
+            parts = base_positive.split("<Prompt Start>")
+            new_positive = parts[0] + "<Prompt Start> Digital anime illustration " + positive_prompt
+        else:
+            new_positive = f"{base_positive} {positive_prompt}".strip()
     else:
-        new_positive = base_positive + " " + positive_prompt
-    
-    workflow["6"]["inputs"]["text"] = new_positive
-    
-    # Actualizar prompt negativo si se proporciona
+        new_positive = positive_prompt
+
+    for node_id in positive_nodes:
+        if node_id in workflow and "inputs" in workflow[node_id]:
+            workflow[node_id]["inputs"]["text"] = new_positive
+
+    # Actualizar prompts negativos (nodos 7 y 16) si se proporciona
     if negative_prompt:
-        base_negative = workflow["7"]["inputs"]["text"]
-        workflow["7"]["inputs"]["text"] = base_negative + " " + negative_prompt
-    
-    # Actualizar resolución
-    workflow["13"]["inputs"]["width"] = width
-    workflow["13"]["inputs"]["height"] = height
-    
-    # Actualizar número de steps
-    workflow["3"]["inputs"]["steps"] = steps
-    
-    # Usar seed proporcionado o generar uno nuevo
-    if seed is not None:
-        workflow["3"]["inputs"]["seed"] = int(seed)
-    else:
-        workflow["3"]["inputs"]["seed"] = generate_random_seed()
+        negative_nodes = ["7", "16"]
+        base_negative = ""
+        for node_id in negative_nodes:
+            base_negative = workflow.get(node_id, {}).get("inputs", {}).get("text", "")
+            if base_negative:
+                break
+        if base_negative:
+            new_negative = f"{base_negative} {negative_prompt}".strip()
+        else:
+            new_negative = negative_prompt
+
+        for node_id in negative_nodes:
+            if node_id in workflow and "inputs" in workflow[node_id]:
+                workflow[node_id]["inputs"]["text"] = new_negative
+
+    # Actualizar resolución (nodo 5 - EmptyLatentImage)
+    if "5" in workflow and "inputs" in workflow["5"]:
+        workflow["5"]["inputs"]["width"] = int(width)
+        workflow["5"]["inputs"]["height"] = int(height)
+
+    # Actualizar configuración de muestreo (nodos 10 y 11 - KSamplerAdvanced)
+    sampler_nodes = ["10", "11"]
+    steps_value = int(steps)
+    seed_value = int(seed) if seed is not None else generate_random_seed()
+
+    for node_id in sampler_nodes:
+        if node_id in workflow and "inputs" in workflow[node_id]:
+            sampler_inputs = workflow[node_id]["inputs"]
+            if "steps" in sampler_inputs:
+                sampler_inputs["steps"] = steps_value
+            if "noise_seed" in sampler_inputs:
+                sampler_inputs["noise_seed"] = seed_value
     
     try:
         # Enviar a la cola
@@ -532,7 +622,7 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
 
 def generate_video_from_image(positive_prompt, source_image, width=None, height=None, negative_prompt=None, length=None, fps=None):
     """Generar un video a partir de una imagen usando ComfyUI"""
-    workflow = load_workflow(VIDEO_WORKFLOW_PATH)
+    workflow = load_workflow(VIDEO_WORKFLOW_PATH, 'workflows/image-to-video/video_wan2_2_14B_i2v_remix.json')
     if not workflow:
         raise ValueError("Video workflow could not be loaded")
 
@@ -621,6 +711,77 @@ def generate_video_from_image(positive_prompt, source_image, width=None, height=
     }
 
 
+def generate_image_edit(positive_prompt, source_image, width=None, height=None, steps=20, seed=None):
+    """Editar una imagen existente usando el workflow de Qwen Image Edit"""
+    if not source_image or not source_image.get('filename'):
+        if not source_image or not source_image.get('data_url'):
+            raise ValueError("No source image provided for edit mode")
+
+    workflow = json.loads(json.dumps(EDIT_WORKFLOW))
+
+    if source_image.get('data_url'):
+        upload_name = upload_image_data_url_to_comfy(
+            data_url=source_image.get('data_url'),
+            filename=source_image.get('filename') or "upload.png",
+            mime_type_override=source_image.get('mime_type')
+        )
+    else:
+        upload_name = upload_image_to_comfy(
+            filename=source_image.get('filename', ''),
+            subfolder=source_image.get('subfolder', ''),
+            image_type=source_image.get('type', 'output')
+        )
+
+    if "78" in workflow:
+        workflow["78"]["inputs"]["image"] = upload_name
+
+    if "111" in workflow and "inputs" in workflow["111"]:
+        workflow["111"]["inputs"]["prompt"] = positive_prompt or ""
+    if "110" in workflow and "inputs" in workflow["110"]:
+        workflow["110"]["inputs"]["prompt"] = ""
+
+    if width is not None and height is not None:
+        try:
+            w = int(width)
+            h = int(height)
+            if "112" in workflow and "inputs" in workflow["112"]:
+                workflow["112"]["inputs"]["width"] = w
+                workflow["112"]["inputs"]["height"] = h
+            megapixels = max((w * h) / 1_000_000, 0.1)
+            if "93" in workflow and "inputs" in workflow["93"]:
+                workflow["93"]["inputs"]["megapixels"] = round(megapixels, 2)
+        except (ValueError, TypeError):
+            pass
+
+    steps_value = int(steps)
+    seed_value = int(seed) if seed is not None else generate_random_seed()
+
+    if "3" in workflow and "inputs" in workflow["3"]:
+        workflow["3"]["inputs"]["steps"] = steps_value
+        workflow["3"]["inputs"]["seed"] = seed_value
+
+    client_id = str(uuid.uuid4())
+    result = queue_prompt(workflow, client_id)
+    prompt_id = result["prompt_id"]
+
+    images = wait_for_completion(
+        client_id,
+        prompt_id,
+        target_nodes=["60"],
+        media_key="images"
+    )
+
+    if not images:
+        raise ValueError("Edit workflow completed but returned no images")
+
+    return {
+        "success": True,
+        "prompt_id": prompt_id,
+        "images": images,
+        "client_id": client_id
+    }
+
+
 @app.route('/')
 def index():
     """Página principal con headers de no-caché"""
@@ -659,8 +820,11 @@ def api_generate():
         prompt = data.get('prompt', '').strip()
         width = data.get('width', 1024)
         height = data.get('height', 1024)
-        steps = data.get('steps', 50)  # Por defecto 50 steps
+        steps = data.get('steps', 20)  # Por defecto 20 steps
         seed = data.get('seed', None)  # Seed opcional
+        mode = (data.get('mode') or 'generate').strip().lower()
+        if mode not in ('generate', 'edit'):
+            return jsonify({"success": False, "error": "Invalid generation mode"}), 400
         
         if not prompt:
             return jsonify({"success": False, "error": "Empty prompt"}), 400
@@ -685,10 +849,99 @@ def api_generate():
             except (ValueError, TypeError):
                 return jsonify({"success": False, "error": "Invalid seed format"}), 400
         
-        # Generar imágenes
-        result = generate_images(prompt, width=width, height=height, steps=steps, seed=seed)
+        if mode == 'generate':
+            result = generate_images(prompt, width=width, height=height, steps=steps, seed=seed)
+        else:
+            source_image = data.get('image') or {}
+            if not source_image.get('filename'):
+                return jsonify({"success": False, "error": "No source image available for edit mode"}), 400
+            result = generate_image_edit(
+                positive_prompt=prompt,
+                source_image=source_image,
+                width=width,
+                height=height,
+                steps=steps,
+                seed=seed
+            )
         
         return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/upload-image', methods=['POST'])
+def api_upload_image():
+    """Subir una imagen proporcionada por el usuario al backend de ComfyUI"""
+    try:
+        if 'image' not in request.files:
+            return jsonify({"success": False, "error": "Image file not provided"}), 400
+
+        image_file = request.files['image']
+        if image_file.filename == '':
+            return jsonify({"success": False, "error": "Invalid filename"}), 400
+
+        file_data = image_file.read()
+        if not file_data:
+            return jsonify({"success": False, "error": "Empty file"}), 400
+
+        original_name = secure_filename(image_file.filename) or "upload.png"
+        extension = os.path.splitext(original_name)[1] or '.png'
+        upload_name = f"user_upload_{uuid.uuid4().hex}{extension}"
+        mime_type = image_file.mimetype or 'image/png'
+
+        upload_response = requests.post(
+            f"{COMFYUI_URL}/upload/image",
+            data={'type': 'input', 'overwrite': 'true'},
+            files={'image': (upload_name, file_data, mime_type)},
+            timeout=60
+        )
+
+        if upload_response.status_code != 200:
+            return jsonify({
+                "success": False,
+                "error": f"Unable to upload image to ComfyUI: HTTP {upload_response.status_code}"
+            }), 500
+
+        return jsonify({
+            "success": True,
+            "image": {
+                "filename": upload_name,
+                "subfolder": "input",
+                "type": "input",
+                "original_name": original_name
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/upload-image-data', methods=['POST'])
+def api_upload_image_data():
+    """Subir una imagen recibida como data URL al backend de ComfyUI"""
+    try:
+        data = request.get_json(force=True, silent=False) or {}
+        data_url = data.get('data_url')
+        if not data_url:
+            return jsonify({"success": False, "error": "Image data URL not provided"}), 400
+
+        filename = secure_filename(data.get('filename') or "upload.png") or "upload.png"
+        mime_type = data.get('mime_type')
+
+        upload_name = upload_image_data_url_to_comfy(
+            data_url=data_url,
+            filename=filename,
+            mime_type_override=mime_type
+        )
+
+        return jsonify({
+            "success": True,
+            "image": {
+                "filename": upload_name,
+                "subfolder": "input",
+                "type": "input",
+                "original_name": filename
+            }
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -704,7 +957,22 @@ def api_generate_video():
 
         image_info = data.get('image') or {}
         if not image_info.get('filename'):
-            return jsonify({"success": False, "error": "Source image is required"}), 400
+            if image_info.get('data_url'):
+                try:
+                    upload_name = upload_image_data_url_to_comfy(
+                        data_url=image_info.get('data_url'),
+                        filename=image_info.get('filename') or image_info.get('original_name') or "upload.png",
+                        mime_type_override=image_info.get('mime_type')
+                    )
+                    image_info = {
+                        "filename": upload_name,
+                        "subfolder": "input",
+                        "type": "input"
+                    }
+                except Exception as e:
+                    return jsonify({"success": False, "error": f"Unable to upload source image: {e}"}), 500
+            else:
+                return jsonify({"success": False, "error": "Source image is required"}), 400
 
         width = data.get('width')
         height = data.get('height')

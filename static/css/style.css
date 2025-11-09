@@ -340,6 +340,46 @@ h1 {
     color: #e0e0e0;
 }
 
+.generation-mode-select {
+    background: #2a2a2a;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    padding: 6px 28px 6px 10px;
+    font-size: 13px;
+    color: #e0e0e0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 110px;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23a0a0a0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 8px center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+}
+
+.generation-mode-select:hover:not(:disabled) {
+    background-color: #333333;
+    border-color: #505050;
+}
+
+.generation-mode-select:focus {
+    outline: none;
+    border-color: #606060;
+    background-color: #333333;
+}
+
+.generation-mode-select:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.generation-mode-select option {
+    background: #1a1a1a;
+    color: #e0e0e0;
+}
+
 /* Botón de Nuevo Prompt (dentro del textfield, izquierda) */
 .new-prompt-inline {
     position: absolute;
@@ -350,6 +390,21 @@ h1 {
     height: 32px;
     padding: 0;
     background: transparent;
+}
+
+.attach-btn-inline {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+}
+
+.hidden-file-input {
+    display: none;
 }
 
 /* Botón de Generar (dentro del textfield, derecha) */
