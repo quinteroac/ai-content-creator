@@ -31,9 +31,16 @@ createApp({
             const storedImage = sessionStorage.getItem('video_source_image');
             if (storedImage) {
                 sessionImage = JSON.parse(storedImage);
+                sessionImage = {
+                    dataUrl: sessionImage.dataUrl || sessionImage.data_url || null,
+                    mimeType: sessionImage.mimeType || sessionImage.mime_type || 'image/png',
+                    original_name: sessionImage.originalName || sessionImage.original_name || sessionImage.filename || 'upload.png',
+                };
+                sessionImage.filename = '';
             }
         } catch (error) {
             console.warn('Unable to parse stored video source image:', error);
+            sessionImage = null;
         }
 
         try {
@@ -68,14 +75,22 @@ createApp({
             videoSourceImage: sessionImage || {
                 filename: initial.filename || '',
                 subfolder: initial.subfolder || '',
-                type: initial.imageType || 'output'
+                type: initial.imageType || 'output',
+                local_path: initial.localPath || initial.filename || '',
+                prompt_id: initial.promptId || ''
             },
             videoPrompt: sessionPrompt !== null ? sessionPrompt : (initial.prompt || ''),
             selectedOrientation: initialOrientation,
             isGeneratingVideo: false,
             videoResults: [],
             videoError: null,
-            previewMode: 'image'
+            previewMode: 'image',
+            showSettingsModal: false,
+            settingsEndpoint: '',
+            settingsError: '',
+            settingsSaved: false,
+            isSavingSettings: false,
+            settingsDirty: false
         };
     },
     computed: {
@@ -88,6 +103,10 @@ createApp({
             }
             if (!this.videoSourceImage.filename) {
                 return '';
+            }
+            const mediaType = (this.videoSourceImage.type || '').toLowerCase();
+            if (mediaType === 'local') {
+                return `/api/image/${this.videoSourceImage.filename}?type=local`;
             }
             const subfolder = this.videoSourceImage.subfolder || '';
             const type = this.videoSourceImage.type || 'output';
@@ -144,14 +163,94 @@ createApp({
                 textarea.focus();
             }
         });
+
+        this.fetchComfyEndpoint();
     },
     methods: {
+        openSettings() {
+            this.settingsError = '';
+            this.settingsSaved = false;
+            this.showSettingsModal = true;
+            this.settingsDirty = false;
+            this.fetchComfyEndpoint();
+        },
+        closeSettings() {
+            if (this.isSavingSettings) {
+                return;
+            }
+            this.showSettingsModal = false;
+            this.settingsError = '';
+            this.settingsSaved = false;
+            this.settingsDirty = false;
+        },
+        async fetchComfyEndpoint() {
+            try {
+                const response = await fetch('/api/settings/comfy-endpoint', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    if (!this.settingsDirty) {
+                        this.settingsEndpoint = data.url || '';
+                    }
+                } else {
+                    this.settingsError = data.error || 'Unable to load ComfyUI endpoint.';
+                }
+            } catch (error) {
+                console.error('Error loading ComfyUI endpoint:', error);
+                this.settingsError = 'Unexpected error loading endpoint.';
+            }
+        },
+        handleSettingsInput() {
+            this.settingsDirty = true;
+            this.settingsSaved = false;
+        },
+        async saveSettings() {
+            if (!this.settingsEndpoint || !this.settingsEndpoint.trim()) {
+                this.settingsError = 'Endpoint URL is required.';
+                this.settingsSaved = false;
+                return;
+            }
+
+            this.isSavingSettings = true;
+            this.settingsError = '';
+            this.settingsSaved = false;
+
+            try {
+                const response = await fetch('/api/settings/comfy-endpoint', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: this.settingsEndpoint.trim() })
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    this.settingsSaved = true;
+                    this.settingsDirty = false;
+                } else {
+                    this.settingsError = data.error || 'Unable to update endpoint.';
+                }
+            } catch (error) {
+                console.error('Error saving ComfyUI endpoint:', error);
+                this.settingsError = 'Unexpected error updating endpoint.';
+            } finally {
+                this.isSavingSettings = false;
+            }
+        },
         goBack() {
             if (this.isGeneratingVideo) return;
             window.location.href = '/';
         },
         getVideoUrl(media) {
             if (!media || !media.filename) return '';
+            const mediaType = (media.type || '').toLowerCase();
+            if (mediaType === 'local') {
+                return `/api/image/${media.filename}?type=local`;
+            }
             const subfolder = media.subfolder || '';
             const type = media.type || 'output';
             const params = new URLSearchParams({ type: type || 'output' });
@@ -188,7 +287,7 @@ createApp({
                 const width = parseInt(widthString, 10) || 560;
                 const height = parseInt(heightString, 10) || 560;
 
-                if (this.videoSourceImage.dataUrl && !this.videoSourceImage.filename) {
+                if (this.videoSourceImage.dataUrl) {
                     try {
                         const uploadResponse = await fetch('/api/upload-image-data', {
                             method: 'POST',
@@ -197,7 +296,7 @@ createApp({
                             },
                             body: JSON.stringify({
                                 data_url: this.videoSourceImage.dataUrl,
-                                filename: this.videoSourceImage.filename || this.videoSourceImage.original_name || 'upload.png',
+                                filename: this.videoSourceImage.original_name || this.videoSourceImage.filename || 'upload.png',
                                 mime_type: this.videoSourceImage.mimeType || 'image/png'
                             })
                         });
@@ -219,6 +318,24 @@ createApp({
                     }
                 }
 
+                const imagePayload = {
+                    filename: this.videoSourceImage.filename,
+                    subfolder: this.videoSourceImage.subfolder || '',
+                    type: this.videoSourceImage.type || 'output'
+                };
+                if (this.videoSourceImage.local_path) {
+                    imagePayload.local_path = this.videoSourceImage.local_path;
+                }
+                if (this.videoSourceImage.mime_type) {
+                    imagePayload.mime_type = this.videoSourceImage.mime_type;
+                }
+                if (this.videoSourceImage.original_name) {
+                    imagePayload.original_name = this.videoSourceImage.original_name;
+                }
+                if (this.videoSourceImage.prompt_id) {
+                    imagePayload.prompt_id = this.videoSourceImage.prompt_id;
+                }
+
                 const response = await fetch('/api/generate-video', {
                     method: 'POST',
                     headers: {
@@ -226,7 +343,7 @@ createApp({
                     },
                     body: JSON.stringify({
                         prompt,
-                        image: this.videoSourceImage,
+                        image: imagePayload,
                         width,
                         height
                     })

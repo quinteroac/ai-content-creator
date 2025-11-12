@@ -1,87 +1,52 @@
-FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+FROM nvcr.io/nvidia/pytorch:25.01-py3
 
 # Avoid interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python 3.10 and system dependencies
+# Install system dependencies (rely on base image Python)
 # This layer rarely changes, so it will be cached
 RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3.10-dev \
-    python3-pip \
+    rsync \
     git \
     wget \
     curl \
     build-essential \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    && rm -rf /var/lib/apt/lists/* && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
-    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+    && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip for better timeout handling
-RUN pip install --upgrade pip
+RUN python3 -m pip install --upgrade pip
 
-# Create working directory and copy requirements early
-# This allows pip cache to work effectively
-WORKDIR /app
-COPY requirements.txt .
+# Install comfy-cli
+RUN pip install comfy-cli
 
-# Install PyTorch first (large packages) - using official PyTorch index
-# CUDA 12.1 for optimal RTX 4090 and RTX 5090 support
-RUN pip install --no-cache-dir --default-timeout=600 \
-    --index-url https://download.pytorch.org/whl/cu121 \
-    torch torchvision torchaudio
+RUN comfy --skip-prompt install --nvidia
 
-# Install other dependencies
-RUN pip install --no-cache-dir --default-timeout=300 \
-    numpy>=1.24.0 pillow>=9.5.0 opencv-python>=4.7.0 requests>=2.28.0 flask>=2.3.0 flask-cors>=3.0.10 websocket-client>=1.6.0
-
-# Install xformers separately with longer timeout (it's a large package)
-# CUDA 12.1 for optimal RTX 4090 and RTX 5090 support
-RUN pip install --no-cache-dir --default-timeout=600 \
-    --index-url https://download.pytorch.org/whl/cu121 \
-    xformers
-
-# Clone ComfyUI, install dependencies
-RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /app/ComfyUI && \
-    cd /app/ComfyUI && \
-    pip install --no-cache-dir --default-timeout=300 -r requirements.txt && \
-    mkdir -p custom_nodes && \
-    git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git custom_nodes/ComfyUI-Manager && \
-    cd custom_nodes/ComfyUI-Manager && \
-    pip install --no-cache-dir --default-timeout=300 -r requirements.txt && \
-    cd /app && \
-    mkdir -p /app/ComfyUI/models /app/ComfyUI/output /app/ComfyUI/input
-
-# Cleanup to reduce final image size (run last to not break cache)
-RUN rm -rf /tmp/* /var/tmp/* ~/.cache \
-    /app/ComfyUI/.git \
-    /app/ComfyUI/custom_nodes/ComfyUI-Manager/.git
+WORKDIR /root
 
 # Copy CivitAI downloader scripts
-COPY civitai_downloader.py /app/civitai_downloader.py
-COPY civitai_web.py /app/civitai_web.py
-RUN chmod +x /app/civitai_downloader.py /app/civitai_web.py
+COPY comfy_model_downloader.sh /root/comfy_model_downloader.sh
+RUN chmod +x /app/comfy_model_downloader.sh
 
 # Copy Anime Generator script and static files
 COPY anime_generator.py /app/anime_generator.py
-COPY templates /app/templates
-COPY static /app/static
-COPY data /app/data
-COPY workflows /app/workflows
-RUN chmod +x /app/anime_generator.py
+COPY templates /root/templates
+COPY static /root/static
+COPY data /root/data
+COPY workflows /root/workflows
+RUN chmod +x /root/anime_generator.py
 
 # Copy entrypoint script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+COPY entrypoint.sh /root/entrypoint.sh
+RUN chmod +x /root/entrypoint.sh
 
-# Expose ports (ComfyUI: 8188, CivitAI Downloader: 7860, Anime Generator: 5000)
-EXPOSE 8188 7860 5000
+# Expose ports (ComfyUI: 8188, Anime Generator: 5000)
+EXPOSE 8188 5000
 
 # Set entrypoint script
 ENTRYPOINT ["/app/entrypoint.sh"]

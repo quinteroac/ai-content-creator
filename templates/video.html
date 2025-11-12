@@ -14,15 +14,20 @@
 <body>
     {% raw %}
     <div id="video-app" class="video-generator-page">
-        <div class="video-header">
-            <button class="video-back-btn" @click="goBack" :disabled="isGeneratingVideo">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        <header class="top-bar top-bar--minimal">
+            <button class="header-icon-button" title="Settings" @click="openSettings">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M19.5 13.5a7.8 7.8 0 0 0 0-3l2-1.6-1.5-3-2.4.9a7.9 7.9 0 0 0-2.6-1.5L14.7 2h-3.4l-.3 3.3a7.9 7.9 0 0 0-2.6 1.5l-2.4-.9-1.5 3 2 1.6a7.8 7.8 0 0 0 0 3l-2 1.6 1.5 3 2.4-.9a7.9 7.9 0 0 0 2.6 1.5l.3 3.3h3.4l.3-3.3a7.9 7.9 0 0 0 2.6-1.5l2.4.9 1.5-3-2-1.6z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                <span>Back to Images</span>
             </button>
-            <h2 class="video-title">Video Generator</h2>
-        </div>
+            <a href="{{ url_for('logout') }}" class="logout-icon" title="Logout">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12 19a7 7 0 110-14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </a>
+        </header>
 
         <div class="video-generator-content">
             <div class="video-preview-panel">
@@ -146,6 +151,31 @@
                             </option>
                         </select>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showSettingsModal" class="settings-modal-backdrop" @click.self="closeSettings">
+            <div class="settings-modal">
+                <h2 class="settings-title">Settings</h2>
+                <label class="settings-label" for="video-settings-comfy-endpoint">ComfyUI Endpoint</label>
+                <input
+                    id="video-settings-comfy-endpoint"
+                    class="settings-input"
+                    type="text"
+                    v-model="settingsEndpoint"
+                    @input="handleSettingsInput"
+                    placeholder="https://your-comfy-endpoint:8188"
+                    :disabled="isSavingSettings"
+                />
+                <p v-if="settingsError" class="settings-feedback settings-error">{{ settingsError }}</p>
+                <p v-if="settingsSaved" class="settings-feedback settings-success">Endpoint updated successfully.</p>
+                <div class="settings-actions">
+                    <button class="settings-button secondary" type="button" @click="closeSettings" :disabled="isSavingSettings">Cancel</button>
+                    <button class="settings-button primary" type="button" @click="saveSettings" :disabled="isSavingSettings">
+                        <span v-if="isSavingSettings">Saving...</span>
+                        <span v-else>Save</span>
+                    </button>
                 </div>
             </div>
         </div>

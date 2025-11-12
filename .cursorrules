@@ -3,5 +3,5 @@ version = 1
 [rules]
 - All code comments must be written in English.
 - All newly added code must use English identifiers and strings unless interacting with external APIs that require another language.
-- Do not add icons or emoji to any files in the repository.
+- Do not add icons or emoji to the comments of the code in order to avoid encoding issues.
 

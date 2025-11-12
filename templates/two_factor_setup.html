@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anime Generator - Configurar 2FA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f172a;
+            margin: 0;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: #e2e8f0;
+        }
+        .card {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 18px;
+            padding: 32px;
+            max-width: 500px;
+            width: 92%;
+            box-shadow: 0 25px 50px rgba(15, 23, 42, 0.35);
+            text-align: center;
+        }
+        h1 {
+            margin-bottom: 12px;
+            font-size: 1.75rem;
+        }
+        p {
+            color: #94a3b8;
+        }
+        .qr-wrapper {
+            background: rgba(15, 23, 42, 0.55);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 24px auto;
+            width: fit-content;
+        }
+        .qr-wrapper img {
+            width: 200px;
+            height: 200px;
+        }
+        form {
+            margin-top: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        input[type="text"] {
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(15, 23, 42, 0.6);
+            color: #e2e8f0;
+            font-size: 1rem;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+        }
+        button {
+            padding: 14px 18px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, #22d3ee, #6366f1);
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(99, 102, 241, 0.35);
+        }
+        .error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+        }
+        .fallback {
+            font-size: 0.9rem;
+            color: #64748b;
+            word-break: break-all;
+            background: rgba(15, 23, 42, 0.45);
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Configurar autenticación de dos factores</h1>
+        <p>
+            Escanea este código QR con Google Authenticator (o una app compatible) y luego ingresa el código de 6 dígitos.
+        </p>
+
+        <div class="qr-wrapper">
+            <img src="data:image/png;base64,{{ qr_code }}" alt="QR TOTP">
+        </div>
+
+        <p class="fallback">
+            Si no puedes escanear el QR, agrega la cuenta manualmente con esta clave:<br>
+            <strong>{{ provisioning_uri }}</strong>
+        </p>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+            <input type="text" name="code" placeholder="Ingresa el código de 6 dígitos" autocomplete="one-time-code" required>
+            <button type="submit">Verificar y continuar</button>
+        </form>
+    </div>
+</body>
+</html>
+

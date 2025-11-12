@@ -44,6 +44,12 @@ Thumbs.db
 # *.pt
 # *.pth
 
+# Outputs generados localmente
+output/
+
+# Datos sensibles generados en runtime
+data/totp_secrets.json
+
 
 # GitHub Actions Runner
 _runner/

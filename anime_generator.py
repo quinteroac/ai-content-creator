@@ -12,17 +12,354 @@ import time
 import threading
 import base64
 import mimetypes
-import websocket
-import requests
+import io
 import random
 import csv
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from functools import wraps
+
+import pyotp
+import qrcode
+import websocket
+import requests
+import datetime
+import logging
+import traceback
+from authlib.integrations.flask_client import OAuth
+from urllib.parse import urlparse
+from flask import (
+    Flask,
+    render_template,
+    request,
+    jsonify,
+    send_from_directory,
+    Response,
+    redirect,
+    url_for,
+    session,
+    abort,
+)
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)  # Permitir CORS para que el frontend pueda hacer requests
 app.config['SECRET_KEY'] = os.urandom(24)
+app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
+app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
+app.config['PREFERRED_URL_SCHEME'] = os.environ.get('PREFERRED_URL_SCHEME', 'https')
+app.config['ENABLE_OAUTH_LOGIN'] = (
+    os.environ.get('ENABLE_OAUTH_LOGIN', 'false').strip().lower() not in {'0', 'false', 'no', 'off'}
+)
+
+ALLOWED_USERS = [
+    email.strip().lower()
+    for email in (os.environ.get('ALLOWED_USERS') or '').split(',')
+    if email.strip()
+]
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
+TOTP_SECRETS_PATH = os.path.join(DATA_DIR, 'totp_secrets.json')
+TOTP_ISSUER = os.environ.get('TOTP_ISSUER', 'Anime Generator')
+
+LOG_DIR = os.path.join(SCRIPT_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+AUTH_LOG_PATH = os.path.join(LOG_DIR, 'auth_debug.log')
+
+OUTPUT_DIR = os.path.join(SCRIPT_DIR, 'output')
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+oauth = OAuth(app)
+if app.config['ENABLE_OAUTH_LOGIN']:
+    if app.config['GOOGLE_CLIENT_ID'] and app.config['GOOGLE_CLIENT_SECRET']:
+        oauth.register(
+            name='google',
+            client_id=app.config['GOOGLE_CLIENT_ID'],
+            client_secret=app.config['GOOGLE_CLIENT_SECRET'],
+            server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+            client_kwargs={'scope': 'openid email profile'},
+        )
+    else:
+        print(
+            "Warning: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured for Google login."
+        )
+else:
+    print("OAuth login disabled via ENABLE_OAUTH_LOGIN.")
+
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
+
+auth_logger = logging.getLogger('auth_debug')
+if not auth_logger.handlers:
+    auth_logger.setLevel(logging.INFO)
+    file_handler = logging.FileHandler(AUTH_LOG_PATH, encoding='utf-8')
+    formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(formatter)
+    auth_logger.addHandler(file_handler)
+    auth_logger.propagate = False
+
+
+def load_totp_secrets():
+    if not os.path.exists(TOTP_SECRETS_PATH):
+        return {}
+    try:
+        with open(TOTP_SECRETS_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception as exc:
+        print(f"Warning: Unable to load TOTP secrets: {exc}")
+    return {}
+
+
+def save_totp_secrets(secrets):
+    try:
+        with open(TOTP_SECRETS_PATH, 'w', encoding='utf-8') as f:
+            json.dump(secrets, f, indent=2)
+    except Exception as exc:
+        print(f"Warning: Unable to persist TOTP secrets: {exc}")
+
+
+TOTP_SECRETS = load_totp_secrets()
+
+
+def is_user_allowed(email):
+    if not email:
+        return False
+    if not ALLOWED_USERS:
+        return True
+    return email.lower() in ALLOWED_USERS
+
+
+def get_user_totp_secret(email):
+    return TOTP_SECRETS.get(email.lower())
+
+
+def ensure_user_totp_secret(email):
+    normalized = email.lower()
+    secret = TOTP_SECRETS.get(normalized)
+    if not secret:
+        secret = pyotp.random_base32()
+        TOTP_SECRETS[normalized] = secret
+        save_totp_secrets(TOTP_SECRETS)
+    return secret
+
+
+def is_authenticated():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        return True
+    return (
+        session.get('user_email')
+        and session.get('google_sub')
+        and session.get('2fa_verified')
+    )
+
+
+def api_login_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not app.config['ENABLE_OAUTH_LOGIN']:
+            return func(*args, **kwargs)
+        if not is_authenticated():
+            return jsonify({"success": False, "error": "Unauthorized"}), 401
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not app.config['ENABLE_OAUTH_LOGIN']:
+            return view_func(*args, **kwargs)
+        if is_authenticated():
+            return view_func(*args, **kwargs)
+
+        if session.get('pending_2fa'):
+            return redirect(url_for('two_factor'))
+
+        next_url = request.args.get('next') or request.path or '/'
+        session['next_url'] = next_url
+        return redirect(url_for('login_page', next=next_url))
+
+    return wrapper
+
+
+def get_next_url(default='/'):
+    return session.pop('next_url', None) or request.args.get('next') or default
+
+
+def require_oauth():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        abort(404, description="OAuth login is disabled.")
+    if not (app.config['GOOGLE_CLIENT_ID'] and app.config['GOOGLE_CLIENT_SECRET']):
+        abort(503, description="Google OAuth is not configured.")
+    return oauth.create_client('google')
+
+
+@app.route('/login')
+def login_page():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        return redirect(url_for('index'))
+    if is_authenticated():
+        return redirect(url_for('index'))
+
+    error_code = request.args.get('error')
+    error_messages = {
+        'unauthorized': 'Access denied for this account.',
+        'oauth_error': 'Authentication failed. Please try again.',
+        '2fa_failed': 'Invalid verification code. Please try again.',
+    }
+    error_message = error_messages.get(error_code)
+    next_url = request.args.get('next') or session.get('next_url') or '/'
+    return render_template('login.html', error=error_message, next_url=next_url)
+
+
+@app.route('/auth/google')
+def auth_google():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        return redirect(url_for('login_page'))
+    next_url = request.args.get('next') or request.referrer or '/'
+    session['next_url'] = next_url
+    google = require_oauth()
+    redirect_uri = url_for('auth_google_callback', _external=True)
+    nonce = uuid.uuid4().hex
+    session['oauth_nonce'] = nonce
+    return google.authorize_redirect(redirect_uri, nonce=nonce)
+
+
+@app.route('/auth/google/callback')
+def auth_google_callback():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        return redirect(url_for('login_page'))
+    google = require_oauth()
+    try:
+        token = google.authorize_access_token()
+        nonce = session.pop('oauth_nonce', None)
+        userinfo = google.parse_id_token(token, nonce=nonce)
+        if not userinfo:
+            userinfo = google.get('userinfo').json()
+        auth_logger.info(
+            "OAuth callback success. token_keys=%s userinfo_keys=%s",
+            list((token or {}).keys()),
+            list((userinfo or {}).keys()),
+        )
+    except Exception as exc:
+        auth_logger.error("OAuth callback error: %s", exc)
+        auth_logger.error("Traceback: %s", traceback.format_exc())
+        auth_logger.error("OAuth token payload: %s", token)
+        session.clear()
+        return redirect(url_for('login_page', error='oauth_error'))
+
+    email = (userinfo or {}).get('email')
+    sub = (userinfo or {}).get('sub')
+    if not email or not sub:
+        auth_logger.warning(
+            "OAuth callback missing email/sub. userinfo=%s", userinfo
+        )
+        session.clear()
+        return redirect(url_for('login_page', error='oauth_error'))
+
+    if not is_user_allowed(email):
+        auth_logger.info("OAuth login rejected (not allowed): %s", email)
+        session.clear()
+        return redirect(url_for('login_page', error='unauthorized'))
+
+    auth_logger.info("OAuth login accepted for %s (sub=%s)", email.lower(), sub)
+
+    session['user_email'] = email.lower()
+    session['google_sub'] = sub
+    session['pending_2fa'] = True
+    session.pop('2fa_verified', None)
+
+    secret = get_user_totp_secret(email)
+    if secret:
+        session.pop('needs_2fa_setup', None)
+        return redirect(url_for('two_factor'))
+
+    ensure_user_totp_secret(email)
+    session['needs_2fa_setup'] = True
+    return redirect(url_for('two_factor_setup'))
+
+
+@app.route('/2fa', methods=['GET', 'POST'])
+def two_factor():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        return redirect(url_for('index'))
+    email = session.get('user_email')
+    if not session.get('pending_2fa') or not email:
+        return redirect(url_for('login_page'))
+
+    if session.get('needs_2fa_setup'):
+        return redirect(url_for('two_factor_setup'))
+
+    secret = get_user_totp_secret(email)
+    if not secret:
+        session['needs_2fa_setup'] = True
+        return redirect(url_for('two_factor_setup'))
+
+    error = None
+    if request.method == 'POST':
+        code = (request.form.get('code') or '').strip()
+        totp = pyotp.TOTP(secret)
+        if totp.verify(code, valid_window=1):
+            auth_logger.info("2FA verification success for %s", email)
+            session['2fa_verified'] = True
+            session['pending_2fa'] = False
+            session.pop('needs_2fa_setup', None)
+            return redirect(get_next_url(url_for('index')))
+        error = 'Invalid verification code. Try again.'
+        auth_logger.warning("2FA verification failed for %s", email)
+
+    return render_template('two_factor_verify.html', error=error)
+
+
+@app.route('/2fa/setup', methods=['GET', 'POST'])
+def two_factor_setup():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        return redirect(url_for('index'))
+    email = session.get('user_email')
+    if not session.get('pending_2fa') or not email:
+        return redirect(url_for('login_page'))
+
+    secret = ensure_user_totp_secret(email)
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(name=email, issuer_name=TOTP_ISSUER)
+
+    buffer = io.BytesIO()
+    qrcode.make(provisioning_uri).save(buffer, format='PNG')
+    qr_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+    error = None
+    if request.method == 'POST':
+        code = (request.form.get('code') or '').strip()
+        if totp.verify(code, valid_window=1):
+            auth_logger.info("2FA setup complete for %s", email)
+            session['2fa_verified'] = True
+            session['pending_2fa'] = False
+            session.pop('needs_2fa_setup', None)
+            return redirect(get_next_url(url_for('index')))
+        error = 'Invalid verification code. Try again.'
+        auth_logger.warning("2FA setup failed (bad code) for %s", email)
+
+    return render_template(
+        'two_factor_setup.html',
+        qr_code=qr_b64,
+        provisioning_uri=provisioning_uri,
+        error=error,
+    )
+
+
+@app.route('/logout')
+def logout():
+    if not app.config['ENABLE_OAUTH_LOGIN']:
+        session.clear()
+        return redirect(url_for('index'))
+    session.clear()
+    return redirect(url_for('login_page'))
+
 
 # Cache de tags en memoria
 TAGS_CACHE = {}
@@ -91,24 +428,34 @@ def add_no_cache_headers(response):
 
 # Configuración de ComfyUI
 # Permite especificar URL completa o construirla desde host y port
-COMFYUI_URL = os.environ.get('COMFYUI_URL', '')
-if not COMFYUI_URL:
-    COMFYUI_HOST = os.environ.get('COMFYUI_HOST', '127.0.0.1')
-    COMFYUI_PORT = int(os.environ.get('COMFYUI_PORT', 8188))
-    # Detectar si debe usar HTTPS (puerto 443) o HTTP
-    if COMFYUI_PORT == 443:
-        COMFYUI_URL = f"https://{COMFYUI_HOST}"
-    else:
-        COMFYUI_URL = f"http://{COMFYUI_HOST}:{COMFYUI_PORT}"
-else:
-    # Extraer host y port de la URL para WebSocket
-    from urllib.parse import urlparse
+def apply_comfy_endpoint(url_value: str):
+    """Actualizar variables globales relacionadas al endpoint de ComfyUI."""
+    global COMFYUI_URL, COMFYUI_HOST, COMFYUI_PORT, WS_PROTOCOL
+
+    normalized = (url_value or '').strip()
+    if not normalized:
+        raise ValueError("ComfyUI endpoint URL cannot be empty.")
+
+    COMFYUI_URL = normalized.rstrip('/')
     parsed = urlparse(COMFYUI_URL)
     COMFYUI_HOST = parsed.hostname or '127.0.0.1'
     COMFYUI_PORT = parsed.port or (443 if parsed.scheme == 'https' else 8188)
+    WS_PROTOCOL = "wss" if parsed.scheme == 'https' else "ws"
 
-# Determinar protocolo WebSocket basado en la URL
-WS_PROTOCOL = "wss" if COMFYUI_URL.startswith("https") else "ws"
+
+env_comfy_url = os.environ.get('COMFYUI_URL', '').strip()
+if env_comfy_url:
+    apply_comfy_endpoint(env_comfy_url)
+else:
+    comfy_host = os.environ.get('COMFYUI_HOST', '127.0.0.1').strip() or '127.0.0.1'
+    try:
+        comfy_port = int(os.environ.get('COMFYUI_PORT', 8188))
+    except (TypeError, ValueError):
+        comfy_port = 8188
+    if comfy_port == 443:
+        apply_comfy_endpoint(f"https://{comfy_host}")
+    else:
+        apply_comfy_endpoint(f"http://{comfy_host}:{comfy_port}")
 
 # Almacenar estados de generación
 generation_status = {}
@@ -535,6 +882,131 @@ def upload_image_data_url_to_comfy(data_url, filename='upload.png', mime_type_ov
 
     return upload_image_bytes_to_comfy(content_bytes, filename=filename, mime_type=mime_type, image_type='input')
 
+
+def resolve_local_media_path(filename):
+    """Resolver la ruta absoluta de un archivo guardado en el directorio local de salida."""
+    if not filename:
+        raise ValueError("Local filename is required")
+
+    if os.path.sep in filename or (os.path.altsep and os.path.altsep in filename):
+        raise ValueError("Invalid local filename")
+
+    output_root = os.path.abspath(OUTPUT_DIR)
+    candidate_path = os.path.abspath(os.path.join(OUTPUT_DIR, filename))
+    if not candidate_path.startswith(output_root):
+        raise ValueError("Local filename resolves outside of output directory")
+    return candidate_path
+
+
+def persist_media_locally(media_items, prompt_id, media_category="images"):
+    """Descargar archivos generados desde ComfyUI y guardarlos en el directorio local."""
+    if not media_items:
+        return []
+
+    saved_items = []
+    output_root = os.path.abspath(OUTPUT_DIR)
+    os.makedirs(output_root, exist_ok=True)
+
+    for index, item in enumerate(media_items, start=1):
+        if isinstance(item, dict):
+            remote_filename = item.get("filename") or f"{prompt_id}_{index}"
+            remote_subfolder = item.get("subfolder", "")
+            remote_type = item.get("type") or "output"
+            format_hint = item.get("format") or item.get("extension")
+        else:
+            remote_filename = str(item)
+            remote_subfolder = ""
+            remote_type = "output"
+            format_hint = None
+
+        params = {"filename": remote_filename, "type": remote_type or "output"}
+        if remote_subfolder:
+            params["subfolder"] = remote_subfolder
+        if format_hint:
+            params["format"] = format_hint
+
+        response = requests.get(
+            f"{COMFYUI_URL}/view",
+            params=params,
+            stream=True,
+            timeout=90,
+        )
+        if response.status_code != 200:
+            response.close()
+            raise ValueError(
+                f"Unable to download generated {media_category[:-1] if media_category.endswith('s') else media_category} "
+                f"'{remote_filename}': HTTP {response.status_code}"
+            )
+
+        content_type = response.headers.get("Content-Type", "")
+        extension = os.path.splitext(remote_filename)[1]
+        if not extension:
+            if format_hint:
+                extension = f".{format_hint.lstrip('.')}"
+            elif content_type:
+                guessed = mimetypes.guess_extension(content_type.split(';')[0])
+                extension = guessed or (".mp4" if media_category == "videos" else ".png")
+            else:
+                extension = ".mp4" if media_category == "videos" else ".png"
+
+        local_filename = f"{prompt_id}_{media_category}_{index:02d}_{uuid.uuid4().hex}{extension}"
+        local_path = os.path.join(output_root, local_filename)
+
+        try:
+            with open(local_path, "wb") as output_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        output_file.write(chunk)
+        finally:
+            response.close()
+
+        try:
+            file_size = os.path.getsize(local_path)
+        except OSError:
+            file_size = None
+
+        media_record = {
+            "filename": local_filename,
+            "type": "local",
+            "subfolder": "",
+            "prompt_id": prompt_id,
+            "local_path": local_filename,
+            "mime_type": content_type or ("video/mp4" if media_category == "videos" else "image/png"),
+            "size": file_size,
+            "original_name": remote_filename,
+            "original": {
+                "filename": remote_filename,
+                "subfolder": remote_subfolder,
+                "type": remote_type,
+            },
+        }
+
+        if format_hint:
+            media_record["format"] = format_hint
+
+        saved_items.append(media_record)
+
+    return saved_items
+
+
+def upload_local_media_to_comfy(local_filename):
+    """Subir un archivo de imagen almacenado localmente a ComfyUI."""
+    resolved_path = resolve_local_media_path(local_filename)
+    if not os.path.exists(resolved_path):
+        raise ValueError(f"Local media file not found: {local_filename}")
+
+    mime_type = mimetypes.guess_type(resolved_path)[0] or 'image/png'
+    with open(resolved_path, "rb") as media_file:
+        content_bytes = media_file.read()
+
+    return upload_image_bytes_to_comfy(
+        content_bytes,
+        filename=os.path.basename(resolved_path),
+        mime_type=mime_type,
+        image_type='input',
+    )
+
+
 def generate_images(positive_prompt, negative_prompt=None, width=1024, height=1024, steps=20, seed=None):
     """Generar imágenes usando ComfyUI"""
     client_id = str(uuid.uuid4())
@@ -605,11 +1077,14 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
         
         # Esperar a que se complete
         images = wait_for_completion(client_id, prompt_id)
-        
+        local_images = persist_media_locally(images, prompt_id, media_category="images")
+        if not local_images:
+            raise ValueError("No images were persisted locally after generation.")
+
         return {
             "success": True,
             "prompt_id": prompt_id,
-            "images": images,
+            "images": local_images,
             "client_id": client_id
         }
     except Exception as e:
@@ -659,11 +1134,22 @@ def generate_video_from_image(positive_prompt, source_image, width=None, height=
         except (ValueError, TypeError):
             pass
 
-    upload_name = upload_image_to_comfy(
-        filename=source_image.get('filename', ''),
-        subfolder=source_image.get('subfolder', ''),
-        image_type=source_image.get('type', 'output')
-    )
+    if source_image.get('data_url'):
+        upload_name = upload_image_data_url_to_comfy(
+            data_url=source_image.get('data_url'),
+            filename=source_image.get('filename') or source_image.get('original_name') or "upload.png",
+            mime_type_override=source_image.get('mime_type')
+        )
+    elif (source_image.get('type') or '').lower() == 'local':
+        upload_name = upload_local_media_to_comfy(
+            source_image.get('local_path') or source_image.get('filename', '')
+        )
+    else:
+        upload_name = upload_image_to_comfy(
+            filename=source_image.get('filename', ''),
+            subfolder=source_image.get('subfolder', ''),
+            image_type=source_image.get('type', 'output')
+        )
 
     if "97" in workflow:
         workflow["97"]["inputs"]["image"] = upload_name
@@ -725,6 +1211,10 @@ def generate_image_edit(positive_prompt, source_image, width=None, height=None, 
             filename=source_image.get('filename') or "upload.png",
             mime_type_override=source_image.get('mime_type')
         )
+    elif (source_image.get('type') or '').lower() == 'local':
+        upload_name = upload_local_media_to_comfy(
+            source_image.get('local_path') or source_image.get('filename', '')
+        )
     else:
         upload_name = upload_image_to_comfy(
             filename=source_image.get('filename', ''),
@@ -774,18 +1264,24 @@ def generate_image_edit(positive_prompt, source_image, width=None, height=None, 
     if not images:
         raise ValueError("Edit workflow completed but returned no images")
 
+    local_images = persist_media_locally(images, prompt_id, media_category="images")
+    if not local_images:
+        raise ValueError("No edited images were persisted locally.")
+
     return {
         "success": True,
         "prompt_id": prompt_id,
-        "images": images,
+        "images": local_images,
         "client_id": client_id
     }
 
 
 @app.route('/')
+@login_required
 def index():
     """Página principal con headers de no-caché"""
-    response = Response(render_template('index.html'))
+    html = render_template('index.html', user_email=session.get('user_email'))
+    response = Response(html)
     # Agregar headers para evitar caché del navegador
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -794,6 +1290,7 @@ def index():
 
 
 @app.route('/video')
+@login_required
 def video_page():
     """Página para la generación de video"""
     filename = request.args.get('filename', '')
@@ -801,18 +1298,23 @@ def video_page():
     image_type = request.args.get('type', 'output')
     prompt = request.args.get('prompt', '')
     resolution = request.args.get('resolution', '1024x1024')
+    local_path = request.args.get('local_path', '')
+    prompt_id = request.args.get('prompt_id', '')
 
     video_data = {
         "filename": filename,
         "subfolder": subfolder,
         "imageType": image_type,
         "prompt": prompt,
-        "resolution": resolution
+        "resolution": resolution,
+        "localPath": local_path,
+        "promptId": prompt_id,
     }
 
-    return render_template('video.html', video_data=video_data)
+    return render_template('video.html', video_data=video_data, user_email=session.get('user_email'))
 
 @app.route('/api/generate', methods=['POST'])
+@api_login_required
 def api_generate():
     """API endpoint para generar imágenes"""
     try:
@@ -870,6 +1372,7 @@ def api_generate():
 
 
 @app.route('/api/upload-image', methods=['POST'])
+@api_login_required
 def api_upload_image():
     """Subir una imagen proporcionada por el usuario al backend de ComfyUI"""
     try:
@@ -916,6 +1419,7 @@ def api_upload_image():
 
 
 @app.route('/api/upload-image-data', methods=['POST'])
+@api_login_required
 def api_upload_image_data():
     """Subir una imagen recibida como data URL al backend de ComfyUI"""
     try:
@@ -946,7 +1450,44 @@ def api_upload_image_data():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/settings/comfy-endpoint', methods=['GET', 'POST'])
+@api_login_required
+def api_comfy_endpoint_settings():
+    """Obtener o actualizar el endpoint de ComfyUI en tiempo de ejecución."""
+    if request.method == 'GET':
+        return jsonify({"success": True, "url": COMFYUI_URL})
+
+    data = request.get_json(silent=True) or {}
+    candidate = (data.get('url') or '').strip()
+    if not candidate:
+        return jsonify({"success": False, "error": "Endpoint URL is required."}), 400
+
+    formatted = candidate
+    if '://' not in formatted:
+        formatted = f"http://{formatted}"
+
+    try:
+        parsed = urlparse(formatted)
+    except Exception:
+        return jsonify({"success": False, "error": "Endpoint URL is invalid."}), 400
+
+    if parsed.scheme not in {'http', 'https'}:
+        return jsonify({"success": False, "error": "Endpoint URL must use http or https."}), 400
+    if not parsed.netloc:
+        return jsonify({"success": False, "error": "Endpoint URL is missing a host."}), 400
+
+    sanitized = formatted.rstrip('/')
+    try:
+        apply_comfy_endpoint(sanitized)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    print(f"[Settings] ComfyUI endpoint updated to {COMFYUI_URL}")
+    return jsonify({"success": True, "url": COMFYUI_URL})
+
+
 @app.route('/api/generate-video', methods=['POST'])
+@api_login_required
 def api_generate_video():
     """API endpoint para generar videos a partir de una imagen"""
     try:
@@ -1010,16 +1551,36 @@ def api_generate_video():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/image/<filename>')
+@api_login_required
 def serve_image(filename):
-    """Servir imágenes generadas - siempre desde ComfyUI /view endpoint"""
+    """Servir imágenes generadas desde almacenamiento local o ComfyUI."""
     try:
         subfolder = request.args.get('subfolder', '')
-        image_type = request.args.get('type', 'output')
+        raw_type = request.args.get('type', 'output') or 'output'
+        image_type = raw_type.lower()
         download = request.args.get('download', '0') == '1'
-        
+
+        if image_type == 'local':
+            try:
+                local_path = resolve_local_media_path(filename)
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+
+            if not os.path.exists(local_path):
+                return jsonify({"error": f"Local file not found: {filename}"}), 404
+
+            as_attachment = download
+            guessed_mime = mimetypes.guess_type(local_path)[0]
+            return send_from_directory(
+                OUTPUT_DIR,
+                os.path.basename(local_path),
+                mimetype=guessed_mime,
+                as_attachment=as_attachment,
+            )
+
         # Siempre obtener la imagen desde el endpoint /view de ComfyUI
         try:
-            params = {"filename": filename, "type": image_type}
+            params = {"filename": filename, "type": raw_type or 'output'}
             if subfolder:
                 params["subfolder"] = subfolder
             format_param = request.args.get('format')
@@ -1050,6 +1611,7 @@ def serve_image(filename):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/status/<prompt_id>')
+@api_login_required
 def get_status(prompt_id):
     """Obtener estado de una generación"""
     if prompt_id in generation_status:
@@ -1057,6 +1619,7 @@ def get_status(prompt_id):
     return jsonify({"error": "Prompt ID not found"}), 404
 
 @app.route('/api/convert-to-natural-language', methods=['POST'])
+@api_login_required
 def convert_to_natural_language():
     """Convertir prompt de tags a lenguaje natural usando OpenAI GPT-4o"""
     try:
@@ -1134,6 +1697,7 @@ def convert_to_natural_language():
         }), 500
 
 @app.route('/api/improve-prompt', methods=['POST'])
+@api_login_required
 def improve_prompt():
     """Mejorar prompt usando OpenAI GPT-4o"""
     try:
@@ -1212,6 +1776,7 @@ def improve_prompt():
         }), 500
 
 @app.route('/api/tags/<category>')
+@api_login_required
 def get_tags(category):
     """Obtener tags filtrados por categoría"""
     try:

@@ -6,13 +6,11 @@
 set -e
 
 # Change to ComfyUI directory
-cd /app/ComfyUI
+cd /root/comfy/ComfyUI
 
 # Configurable environment variables
 PORT=${PORT:-8188}
 HOST=${HOST:-0.0.0.0}
-CIVITAI_PORT=${CIVITAI_PORT:-7860}
-CIVITAI_HOST=${CIVITAI_HOST:-0.0.0.0}
 ANIME_GENERATOR_PORT=${ANIME_GENERATOR_PORT:-5000}
 ANIME_GENERATOR_HOST=${ANIME_GENERATOR_HOST:-0.0.0.0}
 COMFYUI_HOST=${COMFYUI_HOST:-127.0.0.1}
@@ -29,131 +27,98 @@ else
     echo "Warning: nvidia-smi not found. Running in CPU mode."
 fi
 
-# Verify Python is available
-if ! command -v python &> /dev/null; then
+# Resolve Python interpreter
+if command -v python3 &> /dev/null; then
+    PYTHON_BIN="$(command -v python3)"
+elif command -v python &> /dev/null; then
+    PYTHON_BIN="$(command -v python)"
+else
     echo "Error: Python not found"
     exit 1
 fi
+echo "Using Python interpreter: ${PYTHON_BIN}"
 
-# Helper functions
-download_with_wget() {
-    local url="$1"
-    local destination="$2"
-    local name="$3"
-
-    if [ -f "$destination" ]; then
-        echo "✓ $name already exists at $destination"
-        return 0
-    fi
-
-    mkdir -p "$(dirname "$destination")"
-    echo "Downloading $name..."
-    if wget -O "$destination" "$url"; then
-        echo "✓ Downloaded $name"
-    else
-        echo "✗ Failed to download $name from $url"
-        rm -f "$destination"
-        return 1
-    fi
+# Helper function to download a model from HuggingFace
+hf_dl() {
+    local local_dir="$1"
+    local filename="$2"
+    local url="$3"
+    bash /root/comfy_model_downloader.sh hf "$local_dir" "$filename" "$url"
 }
 
-download_from_civitai() {
-    local model_id="$1"
-    local version_id="$2"
-    local name="$3"
-    local override="$4"
-    local api_key_arg="${CIVITAI_API_KEY:-}"
-
-    echo "Ensuring $name (CivitAI ID: $model_id${version_id:+, Version: $version_id})..."
-    if CIVITAI_DIR_OVERRIDE_CHECKPOINT="${override:-}" python /app/civitai_downloader.py "$model_id" "$version_id" "$api_key_arg"; then
-        echo "✓ $name ready"
-    else
-        echo "✗ Failed to download $name (ID: $model_id${version_id:+, Version: $version_id})"
-    fi
+# Helper function to download a model from CivitAI
+civitai_dl() {
+    local local_dir="$1"
+    local filename="$2"
+    local url="$3"
+    bash /root/comfy_model_downloader.sh civitai "$local_dir" "$filename" "$url"
 }
 
-MODELS_ROOT="/app/ComfyUI/models"
+# Download necessary models on container start. Each block invokes the corresponding download function.
+# All downloaded files will be placed under /app/ComfyUI/models/<category>/
 
-echo "=== Preparing Illustrious checkpoint ==="
-download_from_civitai "$ILLUSTRIOUS_CHKP" "" "Illustrious checkpoint"
+civitai_dl "checkpoints" \
+    "plantMilkModelSuite_walnut.safetensors" \
+    "https://civitai.com/api/download/models/1714002?type=Model&format=SafeTensor&size=pruned&fp=fp16"
 
-if [[ "${ENABLE_EDIT,,}" == "true" ]]; then
-    echo "=== Preparing Qwen Edit assets ==="
-    download_with_wget \
-        "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors" \
-        "${MODELS_ROOT}/vae/qwen_image_vae.safetensors" \
-        "Qwen VAE"
+hf_dl "vae" \
+    "qwen_image_vae.safetensors" \
+    "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors"
 
-    download_with_wget \
-        "https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors" \
-        "${MODELS_ROOT}/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors" \
-        "Qwen diffusion model"
+hf_dl "text_encoders" \
+    "qwen_2.5_vl_7b_fp8_scaled.safetensors" \
+    "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
 
-    download_with_wget \
-        "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
-        "${MODELS_ROOT}/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
-        "Qwen text encoder"
+hf_dl "diffusion_models" \
+    "qwen_image_edit_2509_fp8_e4m3fn.safetensors" \
+    "https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors"
 
-    download_with_wget \
-        "https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors" \
-        "${MODELS_ROOT}/loras/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors" \
-        "Qwen Lightning LoRA"
+hf_dl "loras" \
+    "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors" \
+    "https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors"
 
-    download_from_civitai "2097058" "" "Qwen LoRA (2097058)"
-    download_from_civitai "1906441" "" "Qwen LoRA (1906441)"
-    download_from_civitai "1662740" "" "Qwen LoRA (1662740)"
-else
-    echo "ENABLE_EDIT set to false. Skipping Qwen Edit downloads."
-fi
+civitai_dl "loras" \
+    "qwen-edit-skin_1.1_000002750.safetensors" \
+    "https://civitai.com/api/download/models/2376235?type=Model&format=SafeTensor"
 
-if [[ "${ENABLE_VIDEO,,}" == "true" ]]; then
-    echo "=== Preparing WAN assets ==="
-    download_with_wget \
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors" \
-        "${MODELS_ROOT}/vae/wan_2.1_vae.safetensors" \
-        "WAN VAE"
+civitai_dl "loras" \
+    "aldniki_qwen_reality_transform_v01.safetensors" \
+    "https://civitai.com/api/download/models/2157828?type=Model&format=SafeTensor"
 
-    download_with_wget \
-        "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors" \
-        "${MODELS_ROOT}/clip/nsfw_wan_umt5-xxl_fp8_scaled.safetensors" \
-        "WAN CLIP"
+civitai_dl "loras" \
+    "lenovo.safetensors" \
+    "https://civitai.com/api/download/models/2106185?type=Model&format=SafeTensor"
 
-    download_with_wget \
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors" \
-        "${MODELS_ROOT}/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors" \
-        "WAN High Noise LoRA"
+hf_dl "vae" \
+    "wan_2.1_vae.safetensors" \
+    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors"
 
-    download_with_wget \
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors" \
-        "${MODELS_ROOT}/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors" \
-        "WAN Low Noise LoRA"
+hf_dl "clip" \
+    "nsfw_wan_umt5-xxl_fp8_scaled.safetensors" \
+    "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors"
 
-    download_from_civitai "2342708" "2342708" "WAN diffusion model (high)" "diffusion_models"
-    download_from_civitai "2342708" "2342740" "WAN diffusion model (low)" "diffusion_models"
-else
-    echo "ENABLE_VIDEO set to false. Skipping WAN downloads."
-fi
+hf_dl "loras" \
+    "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors" \
+    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors"
 
-# Start CivitAI downloader web interface in background
-echo "Starting CivitAI Model Downloader on ${CIVITAI_HOST}:${CIVITAI_PORT}..."
-cd /app
-python civitai_web.py > /tmp/civitai.log 2>&1 &
-CIVITAI_PID=$!
+hf_dl "loras" \
+    "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors" \
+    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
 
-# Wait a moment for the web server to start
-sleep 2
+civitai_dl "diffusion_models" \
+    "wan22RemixT2VI2V_i2vHighV20.safetensors" \
+    "https://civitai.com/api/download/models/2381931?type=Model&format=SafeTensor&size=pruned&fp=fp8"
 
-# Check if CivitAI web server started successfully
-if ! kill -0 $CIVITAI_PID 2>/dev/null; then
-    echo "Warning: CivitAI downloader failed to start. Check logs at /tmp/civitai.log"
-else
-    echo "✓ CivitAI downloader started (PID: $CIVITAI_PID)"
-fi
+civitai_dl "diffusion_models" \
+    "wan22RemixT2VI2V_i2vLowV20.safetensors" \
+    "https://civitai.com/api/download/models/2382303?type=Model&format=SafeTensor&size=pruned&fp=fp8"
+
+
 
 # Start Anime Generator web interface in background
 echo "Starting Anime Generator on ${ANIME_GENERATOR_HOST}:${ANIME_GENERATOR_PORT}..."
 cd /app
-COMFYUI_HOST=${COMFYUI_HOST} COMFYUI_PORT=${COMFYUI_PORT} python anime_generator.py > /tmp/anime_generator.log 2>&1 &
+COMFYUI_HOST=${COMFYUI_HOST} COMFYUI_PORT=${COMFYUI_PORT} "$PYTHON_BIN" anime_generator.py > /tmp/anime_generator.log 2>&1 &
 ANIME_GENERATOR_PID=$!
 
 # Wait a moment for the web server to start
@@ -172,12 +137,8 @@ echo "Working directory: /app/ComfyUI"
 echo ""
 echo "Access points:"
 echo "  - ComfyUI: http://${HOST}:${PORT}"
-echo "  - CivitAI Downloader: http://${CIVITAI_HOST}:${CIVITAI_PORT}"
 echo "  - Anime Generator: http://${ANIME_GENERATOR_HOST}:${ANIME_GENERATOR_PORT}"
 echo ""
 
-cd /app/ComfyUI
-
 # Run ComfyUI in foreground
-exec python main.py --listen ${HOST} --port ${PORT}
-
+exec comfy launch -- --listen 0.0.0.0 --port ${COMFYUI_PORT}

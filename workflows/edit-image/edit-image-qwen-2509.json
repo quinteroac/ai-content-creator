@@ -236,19 +236,5 @@
     "_meta": {
       "title": "CargadorLoRAModeloSolo"
     }
-  },
-  "395": {
-    "inputs": {
-      "lora_name": "lenovo_chroma.safetensors",
-      "strength_model": 1,
-      "model": [
-        "37",
-        0
-      ]
-    },
-    "class_type": "LoraLoaderModelOnly",
-    "_meta": {
-      "title": "CargadorLoRAModeloSolo"
-    }
   }
 }

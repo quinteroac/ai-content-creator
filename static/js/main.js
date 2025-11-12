@@ -39,7 +39,13 @@ createApp({
             tagsIndex: 0, // Índice para saber cuántos tags hemos mostrado
             allDisplayedTags: new Set(), // Todos los tags que ya se han mostrado (incluyendo los anteriores)
             tagsVisible: true, // Control de visibilidad de los tags
-            isUploadingImage: false // Estado de carga de imágenes en modo edición
+            isUploadingImage: false, // Estado de carga de imágenes en modo edición
+            showSettingsModal: false,
+            settingsEndpoint: '',
+            isSavingSettings: false,
+            settingsError: '',
+            settingsSaved: false,
+            settingsDirty: false
         };
     },
     computed: {
@@ -120,9 +126,15 @@ createApp({
         // Cerrar modal con Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                this.closeModal();
+                if (this.showSettingsModal) {
+                    this.closeSettings();
+                } else {
+                    this.closeModal();
+                }
             }
         });
+
+        this.fetchComfyEndpoint();
     },
     watch: {
         chatMessages: {
@@ -159,14 +171,96 @@ createApp({
                 this.tagsIndex = 0;
             }
         },
-        generationMode(newMode) {
+        generationMode(newMode, oldMode) {
+            const GENERATE_DEFAULT_STEPS = 20;
+            const EDIT_DEFAULT_STEPS = 4;
+
             if (newMode === 'edit') {
+                if (this.selectedSteps === GENERATE_DEFAULT_STEPS) {
+                    this.selectedSteps = EDIT_DEFAULT_STEPS;
+                }
                 this.currentPrompt = '';
                 this.directPrompt = '';
+            } else if (oldMode === 'edit' && this.selectedSteps === EDIT_DEFAULT_STEPS) {
+                this.selectedSteps = GENERATE_DEFAULT_STEPS;
             }
         }
     },
     methods: {
+        openSettings() {
+            this.settingsError = '';
+            this.settingsSaved = false;
+            this.showSettingsModal = true;
+            this.settingsDirty = false;
+            this.fetchComfyEndpoint();
+        },
+        closeSettings() {
+            if (this.isSavingSettings) {
+                return;
+            }
+            this.showSettingsModal = false;
+            this.settingsError = '';
+            this.settingsSaved = false;
+            this.settingsDirty = false;
+        },
+        async fetchComfyEndpoint() {
+            try {
+                const response = await fetch('/api/settings/comfy-endpoint', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    if (!this.settingsDirty) {
+                        this.settingsEndpoint = data.url || '';
+                    }
+                } else {
+                    this.settingsError = data.error || 'Unable to load ComfyUI endpoint.';
+                }
+            } catch (error) {
+                console.error('Error loading ComfyUI endpoint:', error);
+                this.settingsError = 'Unexpected error loading endpoint.';
+            }
+        },
+        handleSettingsInput() {
+            this.settingsDirty = true;
+            this.settingsSaved = false;
+        },
+        async saveSettings() {
+            if (!this.settingsEndpoint || !this.settingsEndpoint.trim()) {
+                this.settingsError = 'Endpoint URL is required.';
+                this.settingsSaved = false;
+                return;
+            }
+
+            this.isSavingSettings = true;
+            this.settingsError = '';
+            this.settingsSaved = false;
+
+            try {
+                const response = await fetch('/api/settings/comfy-endpoint', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: this.settingsEndpoint.trim() })
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    this.settingsSaved = true;
+                    this.settingsDirty = false;
+                } else {
+                    this.settingsError = data.error || 'Unable to update endpoint.';
+                }
+            } catch (error) {
+                console.error('Error saving ComfyUI endpoint:', error);
+                this.settingsError = 'Unexpected error updating endpoint.';
+            } finally {
+                this.isSavingSettings = false;
+            }
+        },
         // Función helper para limpiar respuestas de la IA (remover markdown, backticks, etc.)
         cleanAIResponse(text) {
             if (!text || !text.trim()) {
@@ -510,6 +604,18 @@ createApp({
                             subfolder: lastImage.subfolder || '',
                             type: lastImage.type || 'output'
                         };
+                        if (lastImage.local_path) {
+                            lastImagePayload.local_path = lastImage.local_path;
+                        }
+                        if (lastImage.mime_type) {
+                            lastImagePayload.mime_type = lastImage.mime_type;
+                        }
+                        if (lastImage.original_name) {
+                            lastImagePayload.original_name = lastImage.original_name;
+                        }
+                        if (lastImage.prompt_id) {
+                            lastImagePayload.prompt_id = lastImage.prompt_id;
+                        }
                     }
                 }
 
@@ -636,6 +742,10 @@ createApp({
             }
             if (!media.filename) {
                 return '';
+            }
+            const mediaType = (media.type || '').toLowerCase();
+            if (mediaType === 'local') {
+                return `/api/image/${media.filename}?type=local`;
             }
             const subfolder = media.subfolder || '';
             const type = media.type || 'output';
@@ -765,7 +875,7 @@ createApp({
                 try {
                     const payload = {
                         dataUrl: image.dataUrl,
-                        filename: image.filename || image.original_name || 'upload.png',
+                        originalName: image.filename || image.original_name || 'upload.png',
                         mimeType: image.mimeType || 'image/png'
                     };
                     sessionStorage.setItem('video_source_image', JSON.stringify(payload));
@@ -808,6 +918,12 @@ createApp({
                 subfolder: image.subfolder || '',
                 type: image.type || 'output'
             });
+            if (image.local_path) {
+                params.set('local_path', image.local_path);
+            }
+            if (image.prompt_id) {
+                params.set('prompt_id', image.prompt_id);
+            }
             if (basePrompt) {
                 params.set('prompt', basePrompt);
             }

@@ -142,7 +142,7 @@
   },
   "95": {
     "inputs": {
-      "unet_name": "wan2.2/wan22RemixT2VI2V_i2vHighV20.safetensors",
+      "unet_name": "wan22RemixT2VI2V_i2vHighV20.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
@@ -152,7 +152,7 @@
   },
   "96": {
     "inputs": {
-      "unet_name": "wan2.2/wan22RemixT2VI2V_i2vLowV20.safetensors",
+      "unet_name": "wan22RemixT2VI2V_i2vLowV20.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
@@ -199,7 +199,7 @@
   },
   "101": {
     "inputs": {
-      "lora_name": "high_noise_model.safetensors",
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
       "strength_model": 1,
       "model": [
         "95",
@@ -213,7 +213,7 @@
   },
   "102": {
     "inputs": {
-      "lora_name": "low_noise_model.safetensors",
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
       "strength_model": 1,
       "model": [
         "96",
