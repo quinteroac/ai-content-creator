@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Anime Generator - Video</title>
+    <title>AI Content Creator - Video</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/video.css') }}">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -151,6 +151,15 @@
                 <div class="prompt-controls">
                     <div class="prompt-controls-left"></div>
                     <div class="prompt-controls-right">
+                        <label class="nsfw-toggle-label" :disabled="isGeneratingVideo">
+                            <input 
+                                type="checkbox" 
+                                v-model="enableNSFW"
+                                :disabled="isGeneratingVideo"
+                                class="nsfw-toggle-checkbox"
+                            />
+                            <span class="nsfw-toggle-text">NSFW</span>
+                        </label>
                         <select 
                             v-model="selectedOrientation" 
                             class="aspect-ratio-select"

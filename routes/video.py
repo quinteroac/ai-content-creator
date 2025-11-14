@@ -71,6 +71,7 @@ def create_video_blueprint(app):
             negative_prompt = (data.get('negative_prompt') or '').strip() or None
             length = data.get('length')
             fps = data.get('fps')
+            nsfw = data.get('nsfw', False)
 
             if width is not None:
                 try:
@@ -91,7 +92,8 @@ def create_video_blueprint(app):
                 height=height,
                 negative_prompt=negative_prompt,
                 length=length,
-                fps=fps
+                fps=fps,
+                nsfw=nsfw
             )
 
             return jsonify(result)
@@ -149,6 +151,7 @@ def create_video_blueprint(app):
         negative_prompt = (data.get('negative_prompt') or '').strip() or None
         length = data.get('length')
         fps = data.get('fps')
+        nsfw = data.get('nsfw', False)
 
         try:
             last_frame_info = extract_last_frame(base_video_path)
@@ -171,6 +174,7 @@ def create_video_blueprint(app):
                 negative_prompt=negative_prompt,
                 length=length,
                 fps=fps,
+                nsfw=nsfw
             )
         except Exception as exc:
             return jsonify({"success": False, "error": f"Unable to generate extension video: {exc}"}), 500

@@ -1,5 +1,5 @@
 """
-Configuration and constants for the Anime Generator application
+Configuration and constants for the AI Content Creator application
 """
 import os
 import json
@@ -42,7 +42,7 @@ os.makedirs(OUTPUT_VIDEOS_DIR, exist_ok=True)
 
 # Authentication configuration
 TOTP_SECRETS_PATH = os.path.join(DATA_DIR, 'totp_secrets.json')
-TOTP_ISSUER = os.environ.get('TOTP_ISSUER', get_default('auth.totp_issuer', 'Anime Generator'))
+TOTP_ISSUER = os.environ.get('TOTP_ISSUER', get_default('auth.totp_issuer', 'AI Content Creator'))
 AUTH_LOG_PATH = os.path.join(LOG_DIR, 'auth_debug.log')
 
 ALLOWED_USERS = [

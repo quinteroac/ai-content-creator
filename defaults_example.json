@@ -15,13 +15,22 @@
     "secret_key": null,
     "preferred_url_scheme": "https"
   },
+  "openai": {
+    "api_key": null,
+    "api_base": "https://api.openai.com/v1",
+    "enable_enrichment": false
+  },
+  "civitai": {
+    "api_key": null,
+    "api_url": "https://civitai.com/api/v1"
+  },
   "workflows": {
     "generate": "workflows/text-to-image/text-to-image-lumina.json",
     "edit": "workflows/edit-image/edit-image-qwen-2509.json",
     "video": "workflows/image-to-video/video_wan2_2_14B_i2v_remix_sound.json"
   },
   "auth": {
-    "totp_issuer": "Anime Generator",
+    "totp_issuer": "AI Content Creator",
     "enable_oauth_login": false
   },
   "directories": {
@@ -32,4 +41,3 @@
     "output_videos": "output/videos"
   }
 }
-

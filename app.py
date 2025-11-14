@@ -24,7 +24,7 @@ app.config['GOOGLE_CLIENT_ID'] = GOOGLE_CLIENT_ID
 app.config['GOOGLE_CLIENT_SECRET'] = GOOGLE_CLIENT_SECRET
 app.config['PREFERRED_URL_SCHEME'] = PREFERRED_URL_SCHEME
 app.config['ENABLE_OAUTH_LOGIN'] = ENABLE_OAUTH_LOGIN
-app.config['TOTP_ISSUER'] = 'Anime Generator'
+app.config['TOTP_ISSUER'] = 'AI Content Creator'
 
 # Setup OAuth
 oauth = OAuth(app)

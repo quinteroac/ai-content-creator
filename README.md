@@ -1,8 +1,6 @@
-### IMPORTANT ALL THIS PROJECT WAS VIBE CODING
-
 # AI Content Creator
 
-A powerful web application for iterative anime image generation using ComfyUI. This application provides an intuitive interface for creating anime-style images through an interactive step-by-step process or direct prompt generation.
+A comprehensive web application for AI-powered content creation using ComfyUI. This platform now enables not only iterative and direct anime-style image generation, but also supports advanced image editing, image-to-video generation, video extension, and automated prompt enrichment with OpenAI. Users can leverage interactive step-by-step workflows, manage a rich gallery of generated media, and enjoy seamless integration of new features such as two-factor authentication and refined OAuth login for enhanced security.
 
 ## 🎨 Features
 
@@ -260,3 +258,16 @@ This project uses ComfyUI and other open-source components. Please refer to thei
 ---
 
 **For support or issues, please check the application logs or create an issue in the repository.**
+
+### IMPORTANT: THIS PROJECT IS DEVELOPED AND MAINTAINED USING "VIBE CODING" PRACTICES
+### PLEASE CONSIDER THIS BEFORE CLONING OR USING THE CODE, ESPECIALLY IF YOU PLAN TO USE IT IN PRODUCTION ENVIRONMENTS
+**Learn more about the risks of "vibe coding" in production applications:**
+
+- ["Don’t Be a Vibe Coder"](https://medium.com/data-science-in-your-pocket/dont-be-a-vibe-coder-30fa7c525971) — An accessible introduction to the drawbacks of writing code based only on intuition, habits, or superficial patterns, rather than with engineering rigor.
+- ["Vibe-Driven Development: Why It’s Dangerous"](https://news.ycombinator.com/item?id=38940257) — Community discussion on Hacker News about the hazards of skipping specs, documentation, and review processes.
+- ["Why You Should Avoid Cowboy Coding in Production"](https://dev.to/karanpratapsingh/why-you-should-avoid-cowboy-coding-in-production-1ffa) — Explores how informal coding practices can lead to technical debt and major production issues.
+- ["RISK: When Intuition Replaces Process in Software Engineering"](https://increment.com/development/the-dangers-of-developer-intuition/) — Long-form examination of the operational and security risks of "just code what feels right."
+- ["What is Cowboy Coding?"](https://en.wikipedia.org/wiki/Cowboy_coding) — Wikipedia summary about the related concept of unsupervised and undisciplined software development.
+
+
+Vibe coding is cool and fun 😎🚀, just keep in mind before using this codebase in production, it is recommended to read these resources and ensure industry best practices, code reviews, and security processes are in place. 🔒✅

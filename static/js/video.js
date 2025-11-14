@@ -88,6 +88,7 @@ createApp({
             videoResults: [],
             videoError: null,
             previewMode: 'image',
+            enableNSFW: false,
             showSettingsModal: false,
             settingsEndpoints: {
                 generate: '',
@@ -370,7 +371,8 @@ createApp({
                         prompt,
                         image: imagePayload,
                         width,
-                        height
+                        height,
+                        nsfw: this.enableNSFW
                     })
                 });
 

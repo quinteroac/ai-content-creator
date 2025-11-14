@@ -8,11 +8,19 @@ from utils.comfy import queue_prompt, wait_for_completion
 from utils.media import persist_media_locally, upload_image_data_url_to_comfy, upload_local_media_to_comfy, upload_image_to_comfy
 from config import VIDEO_WORKFLOW_PATH
 
-def generate_video_from_image(positive_prompt, source_image, width=None, height=None, negative_prompt=None, length=None, fps=None):
+def generate_video_from_image(positive_prompt, source_image, width=None, height=None, negative_prompt=None, length=None, fps=None, nsfw=False):
     """Generar un video a partir de una imagen usando ComfyUI"""
-    workflow = load_workflow(VIDEO_WORKFLOW_PATH, 'workflows/image-to-video/video_wan2_2_14B_i2v_remix_sound.json')
+    # Seleccionar workflow según NSFW
+    if nsfw:
+        workflow_path = 'workflows/image-to-video/video_wan2_2_14B_i2v_remix_sound_nsfw.json'
+        print(f"[VIDEO] Using NSFW workflow: {workflow_path}")
+    else:
+        workflow_path = 'workflows/image-to-video/video_wan2_2_14B_i2v_remix_sound.json'
+        print(f"[VIDEO] Using standard workflow: {workflow_path}")
+    
+    workflow = load_workflow(VIDEO_WORKFLOW_PATH, workflow_path)
     if not workflow:
-        raise ValueError("Video workflow could not be loaded")
+        raise ValueError(f"Video workflow could not be loaded: {workflow_path}")
 
     workflow = json.loads(json.dumps(workflow))
 

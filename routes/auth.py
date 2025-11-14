@@ -140,7 +140,7 @@ def create_auth_blueprint(app, oauth):
 
         secret = ensure_user_totp_secret(email)
         totp = pyotp.TOTP(secret)
-        provisioning_uri = totp.provisioning_uri(name=email, issuer_name=app.config.get('TOTP_ISSUER', 'Anime Generator'))
+        provisioning_uri = totp.provisioning_uri(name=email, issuer_name=app.config.get('TOTP_ISSUER', 'AI Content Creator'))
 
         qr_b64 = generate_qr_code(provisioning_uri)
 
