@@ -72,6 +72,26 @@ COMFYUI_HOST = parsed.hostname or '127.0.0.1'
 COMFYUI_PORT = parsed.port or (443 if parsed.scheme == 'https' else 8188)
 WS_PROTOCOL = "wss" if parsed.scheme == 'https' else "ws"
 
+# Modal credentials (optional)
+MODAL_KEY = os.environ.get('MODAL_KEY') or get_default('modal.key')
+MODAL_SECRET = os.environ.get('MODAL_SECRET') or get_default('modal.secret')
+
+def get_modal_headers():
+    """Obtener headers opcionales para Modal (si están configurados)."""
+    headers = {}
+    if MODAL_KEY:
+        headers["Modal-Key"] = MODAL_KEY
+    if MODAL_SECRET:
+        headers["Modal-Secret"] = MODAL_SECRET
+    return headers
+
+def build_comfy_headers(extra_headers=None):
+    """Construir headers para ComfyUI incluyendo Modal si aplica."""
+    headers = get_modal_headers()
+    if extra_headers:
+        headers.update(extra_headers)
+    return headers
+
 def get_comfy_url(mode='generate'):
     """Obtener la URL de ComfyUI según el modo de operación."""
     mode_lower = mode.lower()

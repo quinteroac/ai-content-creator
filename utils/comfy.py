@@ -8,7 +8,7 @@ import time
 import threading
 import requests
 import websocket
-from utils.comfy_config import get_comfy_url, COMFYUI_HOST, COMFYUI_PORT, WS_PROTOCOL
+from utils.comfy_config import get_comfy_url, COMFYUI_HOST, COMFYUI_PORT, WS_PROTOCOL, build_comfy_headers
 
 def queue_prompt(workflow, client_id=None, mode='generate'):
     """Enviar prompt a la cola de ComfyUI"""
@@ -22,7 +22,7 @@ def queue_prompt(workflow, client_id=None, mode='generate'):
         response = requests.post(
             f"{comfy_url}/prompt",
             data=data,
-            headers={"Content-Type": "application/json"}
+            headers=build_comfy_headers({"Content-Type": "application/json"})
         )
         
         if response.status_code == 200:
@@ -51,7 +51,10 @@ def get_media_outputs(prompt_id, target_nodes=None, media_key="images", mode='ge
     try:
         # Intentar primero el endpoint específico /history/{prompt_id}
         try:
-            response = requests.get(f"{comfy_url}/history/{prompt_id}")
+            response = requests.get(
+                f"{comfy_url}/history/{prompt_id}",
+                headers=build_comfy_headers()
+            )
             if response.status_code == 200:
                 history_data = response.json()
 
@@ -130,7 +133,10 @@ def get_media_outputs(prompt_id, target_nodes=None, media_key="images", mode='ge
             print(f"[WARN] Endpoint /history/{prompt_id} not available (status: {getattr(e.response, 'status_code', 'N/A')}), using fallback")
 
         # Fallback: obtener el historial completo y buscar el prompt_id
-        response = requests.get(f"{comfy_url}/history")
+        response = requests.get(
+            f"{comfy_url}/history",
+            headers=build_comfy_headers()
+        )
         if response.status_code == 200:
             history = response.json()
             if prompt_id in history:
@@ -258,12 +264,16 @@ def wait_for_completion(client_id, prompt_id, max_wait=300, target_nodes=None, m
             ws_url = f"{WS_PROTOCOL}://{COMFYUI_HOST}/ws?clientId={client_id}"
         else:
             ws_url = f"{WS_PROTOCOL}://{COMFYUI_HOST}:{COMFYUI_PORT}/ws?clientId={client_id}"
+
+        modal_headers = build_comfy_headers()
+        ws_header = [f"{key}: {value}" for key, value in modal_headers.items()] if modal_headers else None
         ws = websocket.WebSocketApp(
             ws_url,
             on_message=on_message,
             on_error=on_error,
             on_close=on_close,
-            on_open=on_open
+            on_open=on_open,
+            header=ws_header
         )
         
         def run_ws():
@@ -316,7 +326,10 @@ def wait_for_completion(client_id, prompt_id, max_wait=300, target_nodes=None, m
     # Verificar si el prompt ya existe en el historial
     comfy_url = get_comfy_url(mode)
     try:
-        response = requests.get(f"{comfy_url}/history/{prompt_id}")
+        response = requests.get(
+            f"{comfy_url}/history/{prompt_id}",
+            headers=build_comfy_headers()
+        )
         if response.status_code == 200:
             history_data = response.json()
             if prompt_id in history_data or "outputs" in history_data:
@@ -329,7 +342,10 @@ def wait_for_completion(client_id, prompt_id, max_wait=300, target_nodes=None, m
         if time.time() - last_check >= check_interval:
             comfy_url = get_comfy_url(mode)
             try:
-                response = requests.get(f"{comfy_url}/history/{prompt_id}")
+                response = requests.get(
+                    f"{comfy_url}/history/{prompt_id}",
+                    headers=build_comfy_headers()
+                )
                 if response.status_code == 200:
                     history_data = response.json()
                     if prompt_id in history_data or "outputs" in history_data:
@@ -410,3 +426,19 @@ def wait_for_completion(client_id, prompt_id, max_wait=300, target_nodes=None, m
 
     return media_items
 
+
+def interrupt_comfy_execution(mode='generate'):
+    """Enviar señal de interrupción a ComfyUI para detener la ejecución actual."""
+    comfy_url = get_comfy_url(mode)
+    try:
+        response = requests.post(
+            f"{comfy_url}/queue/interrupt",
+            headers=build_comfy_headers(),
+            timeout=5
+        )
+        if response.status_code not in (200, 204):
+            raise Exception(f"Interrupt failed: HTTP {response.status_code} - {response.text}")
+        return True
+    except Exception as exc:
+        print(f"[COMFY] Error interrupting execution: {exc}")
+        raise

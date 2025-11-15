@@ -191,13 +191,26 @@
                 
                 <!-- Botón Generar (dentro del textfield, derecha) -->
                 <button 
+                    v-if="!isGenerating"
                     @click="handleInput" 
                     class="generate-btn-inline"
-                    :disabled="isGenerating || isImproving || (promptMode === 'interactive' && isFlowComplete)"
+                    :disabled="isImproving || (promptMode === 'interactive' && isFlowComplete)"
                     title="Generate"
                 >
                     <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                    </svg>
+                </button>
+                <button
+                    v-else
+                    class="generate-btn-inline stop-btn"
+                    @click="stopGeneration"
+                    :disabled="isStoppingGeneration"
+                    title="Stop generation"
+                >
+                    <span v-if="isStoppingGeneration" class="stop-label">Stopping...</span>
+                    <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="7" y="7" width="10" height="10" rx="2"></rect>
                     </svg>
                 </button>
                 

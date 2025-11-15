@@ -152,7 +152,7 @@ def get_authorization_url(redirect_uri, client_id, client_secret):
         )
         authorization_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true',
+            include_granted_scopes='false',
             prompt='consent'
         )
         print(f"[GOOGLE_DRIVE] Authorization URL generated successfully")
@@ -164,9 +164,11 @@ def get_authorization_url(redirect_uri, client_id, client_secret):
         traceback.print_exc()
         return None, None
 
-def exchange_code_for_credentials(code, redirect_uri, client_id, client_secret):
+def exchange_code_for_credentials(code, redirect_uri, client_id, client_secret, scopes=None):
     """Intercambiar código de autorización por credenciales"""
     try:
+        effective_scopes = scopes or SCOPES
+        print(f"[GOOGLE_DRIVE] Exchanging code with scopes: {effective_scopes}")
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -177,7 +179,7 @@ def exchange_code_for_credentials(code, redirect_uri, client_id, client_secret):
                     "redirect_uris": [redirect_uri]
                 }
             },
-            scopes=SCOPES,
+            scopes=effective_scopes,
             redirect_uri=redirect_uri
         )
         flow.fetch_token(code=code)

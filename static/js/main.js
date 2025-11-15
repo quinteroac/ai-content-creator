@@ -52,7 +52,9 @@ createApp({
             settingsSaved: false,
             settingsDirty: false,
             driveAuthenticated: false,
-            isUploadingToDrive: false
+            isUploadingToDrive: false,
+            generationAbortController: null,
+            isStoppingGeneration: false
         };
     },
     computed: {
@@ -600,6 +602,9 @@ createApp({
             this.chatMessages.push(newMessage);
             
             this.isGenerating = true;
+            this.isStoppingGeneration = false;
+            const abortController = new AbortController();
+            this.generationAbortController = abortController;
             
             try {
                 let lastImagePayload = null;
@@ -651,6 +656,7 @@ createApp({
                     headers: {
                         'Content-Type': 'application/json',
                     },
+                    signal: abortController.signal,
                     body: JSON.stringify({
                         prompt: promptToUse,
                         width: width,
@@ -686,20 +692,51 @@ createApp({
                 // Actualizar el mensaje con el error
                 const messageIndex = this.chatMessages.findIndex(m => m.id === messageId);
                 if (messageIndex !== -1) {
+                    const cancelled = error.name === 'AbortError';
                     this.chatMessages[messageIndex].response = {
                         loading: false,
                         images: [],
-                        error: 'Connection error: ' + error.message
+                        error: cancelled ? 'Generation cancelled by user.' : 'Connection error: ' + error.message
                     };
                 }
-                            } finally {
-                    this.isGenerating = false;
-                    // Si estamos en el último paso y terminó la generación, marcar el flujo como completado
-                    if (this.currentStep === this.steps.length - 1) {
-                        this.flowCompleted = true;
-                    }
+            } finally {
+                if (this.generationAbortController === abortController) {
+                    this.generationAbortController = null;
                 }
-            },
+                const wasAborted = abortController.signal.aborted;
+                this.isGenerating = false;
+                this.isStoppingGeneration = false;
+                // Si estamos en el último paso y terminó la generación, marcar el flujo como completado
+                if (!wasAborted && this.currentStep === this.steps.length - 1) {
+                    this.flowCompleted = true;
+                }
+            }
+        },
+
+        async stopGeneration() {
+            if (!this.isGenerating || this.isStoppingGeneration) {
+                return;
+            }
+            this.isStoppingGeneration = true;
+
+            if (this.generationAbortController) {
+                this.generationAbortController.abort();
+            }
+
+            try {
+                await fetch('/api/generate/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ mode: this.generationMode })
+                });
+            } catch (error) {
+                console.error('Error sending stop request:', error);
+            } finally {
+                this.isStoppingGeneration = false;
+            }
+        },
         
         resetPromptBuilder() {
             this.currentStep = 0;

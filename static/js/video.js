@@ -492,6 +492,12 @@ createApp({
                 this.isGeneratingVideo = false;
             }
         },
+
+        handleNSFWToggle() {
+            if (this.enableNSFW) {
+                this.enableNoSound = false;
+            }
+        },
         async extendVideo(video, index) {
             if (this.isGeneratingVideo || this.isExtendingVideo) {
                 return;

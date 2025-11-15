@@ -4,6 +4,7 @@ Routes for image generation
 from flask import Blueprint, request, jsonify
 from domains.generate import generate_images
 from auth import api_login_required
+from utils.comfy import interrupt_comfy_execution
 
 def create_generate_blueprint(app):
     """Crear blueprint de generación de imágenes"""
@@ -69,6 +70,18 @@ def create_generate_blueprint(app):
                 )
             
             return jsonify(result)
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @generate_bp.route('/api/generate/stop', methods=['POST'])
+    @api_login_required(app)
+    def api_generate_stop():
+        """Detener la generación actual en ComfyUI."""
+        try:
+            data = request.get_json(silent=True) or {}
+            mode = (data.get('mode') or 'generate').strip().lower()
+            interrupt_comfy_execution(mode if mode in ('generate', 'edit') else 'generate')
+            return jsonify({"success": True})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
 

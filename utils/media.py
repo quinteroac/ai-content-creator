@@ -9,7 +9,7 @@ import mimetypes
 import requests
 from werkzeug.utils import secure_filename
 from config import OUTPUT_DIR
-from utils.comfy_config import get_comfy_url
+from utils.comfy_config import get_comfy_url, build_comfy_headers
 
 def resolve_local_media_path(relative_path):
     """Resolver la ruta absoluta de un archivo guardado en el directorio local de salida."""
@@ -39,7 +39,11 @@ def upload_image_to_comfy(filename, subfolder='', image_type='output', mode='gen
     if subfolder:
         params['subfolder'] = subfolder
 
-    response = requests.get(f"{comfy_url}/view", params=params)
+    response = requests.get(
+        f"{comfy_url}/view",
+        params=params,
+        headers=build_comfy_headers()
+    )
     if response.status_code != 200:
         raise ValueError(f"Unable to retrieve source image: HTTP {response.status_code}")
 
@@ -50,7 +54,8 @@ def upload_image_to_comfy(filename, subfolder='', image_type='output', mode='gen
     upload_response = requests.post(
         f"{comfy_url}/upload/image",
         data={'type': 'input', 'overwrite': 'true'},
-        files={'image': (upload_name, response.content, content_type)}
+        files={'image': (upload_name, response.content, content_type)},
+        headers=build_comfy_headers()
     )
 
     if upload_response.status_code != 200:
@@ -76,7 +81,8 @@ def upload_image_bytes_to_comfy(content_bytes, filename='upload.png', mime_type=
     upload_response = requests.post(
         f"{comfy_url}/upload/image",
         data={'type': image_type, 'overwrite': 'true'},
-        files={'image': (upload_name, content_bytes, mime_type or 'image/png')}
+        files={'image': (upload_name, content_bytes, mime_type or 'image/png')},
+        headers=build_comfy_headers()
     )
 
     if upload_response.status_code != 200:
@@ -159,6 +165,7 @@ def persist_media_locally(media_items, prompt_id, media_category="images", mode=
         response = requests.get(
             f"{comfy_url}/view",
             params=params,
+            headers=build_comfy_headers(),
             stream=True
         )
         if response.status_code != 200:

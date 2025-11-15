@@ -7,6 +7,15 @@ from utils.workflow import get_workflow_by_model, find_save_image_nodes
 from utils.comfy import queue_prompt, wait_for_completion
 from utils.media import persist_media_locally
 
+CHROMA_DEFAULT_NEGATIVE = (
+    "Blurry, Low res, Bad Quality, Low Quality, blurry, low quality, pixelated, noisy, distorted, "
+    "mutated hands, mutated fingers, extra limbs, extra arms, extra legs, extra heads, extra eyes, "
+    "deformed face, unrealistic anatomy, unnatural proportions, poorly drawn, doll-like, plastic skin, "
+    "waxy texture, cartoon, 3d render, cgi, clay, low resolution, watermark, text, signature, cut off, "
+    "cropped head, missing limbs, asymmetry, glowing skin, unnatural colors, oversaturated, out of focus, "
+    "bad perspective, malformed body, bad composition, amateur drawing"
+)
+
 def generate_random_seed():
     """Generar una semilla aleatoria para la generación de imágenes"""
     import random
@@ -110,6 +119,13 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
         if node_id in workflow and "inputs" in workflow[node_id]:
             workflow[node_id]["inputs"]["text"] = new_positive
     
+    # Aplicar negative prompt por defecto para Chroma
+    if model == 'chroma':
+        if negative_prompt:
+            negative_prompt = f"{negative_prompt}, {CHROMA_DEFAULT_NEGATIVE}"
+        else:
+            negative_prompt = CHROMA_DEFAULT_NEGATIVE
+
     # Actualizar prompts negativos si se proporciona
     if negative_prompt:
         base_negative = ""

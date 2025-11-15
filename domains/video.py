@@ -3,9 +3,11 @@ Domain logic for video generation (image-to-video)
 """
 import json
 import uuid
+import requests
 from utils.workflow import VIDEO_WORKFLOW, load_workflow, find_video_output_nodes
 from utils.comfy import queue_prompt, wait_for_completion
 from utils.media import persist_media_locally, upload_image_data_url_to_comfy, upload_local_media_to_comfy, upload_image_to_comfy
+from utils.comfy_config import get_comfy_url, build_comfy_headers
 from config import VIDEO_WORKFLOW_PATH
 
 def generate_video_from_image(positive_prompt, source_image, width=None, height=None, negative_prompt=None, length=None, fps=None, nsfw=False, no_sound=False):
@@ -134,16 +136,21 @@ def generate_video_from_image(positive_prompt, source_image, width=None, height=
     # Para video, siempre necesitamos que esté en 'input'
     elif source_image.get('filename'):
         source_image_type = (source_image.get('type') or '').lower()
+        modal_headers = build_comfy_headers()
         
         # Intentar verificar si la imagen existe en el endpoint de video en 'input'
         try:
-            from utils.comfy_config import get_comfy_url
             comfy_url = get_comfy_url('video')
             # Verificar si existe en 'input' (donde LoadImage la busca)
-            check_response = requests.get(f"{comfy_url}/view", params={
-                'filename': source_image.get('filename'),
-                'type': 'input'
-            }, timeout=5)
+            check_response = requests.get(
+                f"{comfy_url}/view",
+                params={
+                    'filename': source_image.get('filename'),
+                    'type': 'input'
+                },
+                headers=modal_headers,
+                timeout=5
+            )
             
             if check_response.status_code == 200:
                 upload_name = source_image.get('filename')
@@ -169,10 +176,15 @@ def generate_video_from_image(positive_prompt, source_image, width=None, height=
                     for endpoint_mode, img_type in download_urls:
                         try:
                             endpoint_url = get_comfy_url(endpoint_mode)
-                            download_response = requests.get(f"{endpoint_url}/view", params={
-                                'filename': source_image.get('filename'),
-                                'type': img_type
-                            }, timeout=10)
+                            download_response = requests.get(
+                                f"{endpoint_url}/view",
+                                params={
+                                    'filename': source_image.get('filename'),
+                                    'type': img_type
+                                },
+                                headers=modal_headers,
+                                timeout=10
+                            )
                             if download_response.status_code == 200:
                                 print(f"[VIDEO] Found image in {endpoint_mode} endpoint ({img_type})")
                                 break

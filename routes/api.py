@@ -10,7 +10,7 @@ import traceback
 import mimetypes
 from flask import Blueprint, request, jsonify, send_file, Response
 from werkzeug.utils import secure_filename
-from utils.comfy_config import get_comfy_url, update_comfy_endpoint, get_all_endpoints
+from utils.comfy_config import get_comfy_url, update_comfy_endpoint, get_all_endpoints, build_comfy_headers
 from utils.media import resolve_local_media_path, upload_image_data_url_to_comfy, upload_image_bytes_to_comfy
 from utils.google_drive import get_authorization_url, exchange_code_for_credentials, get_drive_service, upload_file_to_drive
 from auth import api_login_required
@@ -97,7 +97,8 @@ def create_api_blueprint(app):
             upload_response = requests.post(
                 f"{comfy_url}/upload/image",
                 data={'type': 'input', 'overwrite': 'true'},
-                files={'image': (upload_name, file_data, mime_type)}
+                files={'image': (upload_name, file_data, mime_type)},
+                headers=build_comfy_headers()
             )
 
             if upload_response.status_code != 200:
@@ -283,7 +284,12 @@ def create_api_blueprint(app):
                 print(f"[MEDIA] Proxying request to /view with params: {params}")
 
                 comfy_url = get_comfy_url('generate')
-                response = requests.get(f"{comfy_url}/view", params=params, stream=True)
+                response = requests.get(
+                    f"{comfy_url}/view",
+                    params=params,
+                    headers=build_comfy_headers(),
+                    stream=True
+                )
                 if response.status_code == 200:
                     return Response(
                         response.iter_content(chunk_size=8192),
@@ -589,11 +595,17 @@ def create_api_blueprint(app):
             print(f"[GOOGLE_DRIVE] Callback - Host: {host}, Scheme: {scheme}")
             print(f"[GOOGLE_DRIVE] Callback redirect URI: {redirect_uri}")
             
+            granted_scopes_param = request.args.get('scope')
+            granted_scopes = granted_scopes_param.split(' ') if granted_scopes_param else None
+            if granted_scopes:
+                print(f"[GOOGLE_DRIVE] Granted scopes from callback: {granted_scopes}")
+            
             credentials = exchange_code_for_credentials(
                 code=code,
                 redirect_uri=redirect_uri,
                 client_id=GOOGLE_CLIENT_ID,
-                client_secret=GOOGLE_CLIENT_SECRET
+                client_secret=GOOGLE_CLIENT_SECRET,
+                scopes=granted_scopes
             )
             
             if not credentials:
@@ -643,6 +655,14 @@ def create_api_blueprint(app):
                     "success": False,
                     "error": "file_url is required"
                 }), 400
+            
+            # Normalizar URL para soportar rutas relativas del backend
+            if file_url.startswith('/'):
+                file_url = urljoin(request.host_url, file_url.lstrip('/'))
+            else:
+                parsed_url = urlparse(file_url)
+                if not parsed_url.scheme:
+                    file_url = urljoin(request.host_url, file_url)
             
             # Descargar el archivo
             # Si es un data URL, decodificarlo directamente

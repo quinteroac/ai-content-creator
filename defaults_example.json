@@ -25,6 +25,10 @@
     "model": "gpt-4o",
     "enable_enrichment": false
   },
+  "modal": {
+    "key": null,
+    "secret": null
+  },
   "civitai": {
     "api_key": null,
     "api_url": "https://civitai.com/api/v1"

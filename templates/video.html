@@ -168,7 +168,7 @@
                                 v-model="enableNSFW"
                                 :disabled="isGeneratingVideo"
                                 class="nsfw-toggle-checkbox"
-                                @change="if (enableNSFW) enableNoSound = false"
+                                @change="handleNSFWToggle"
                             />
                             <span class="nsfw-toggle-text">NSFW</span>
                         </label>

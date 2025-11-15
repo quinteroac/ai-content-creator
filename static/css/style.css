@@ -595,6 +595,34 @@ h1 {
     stroke: #333;
 }
 
+.generate-btn-inline.stop-btn {
+    border: 1px solid rgba(255, 120, 120, 0.6);
+    background: rgba(255, 82, 82, 0.12);
+}
+
+.generate-btn-inline.stop-btn .icon {
+    width: 18px;
+    height: 18px;
+}
+
+.generate-btn-inline.stop-btn svg {
+    stroke: #ff9b9b;
+}
+
+.generate-btn-inline.stop-btn:hover:not(:disabled) {
+    background: rgba(255, 82, 82, 0.2);
+}
+
+.generate-btn-inline.stop-btn:disabled {
+    opacity: 0.7;
+}
+
+.stop-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #ff9b9b;
+}
+
 /* Botón de Generar (original, para referencia) */
 .generate-btn {
     display: flex;
