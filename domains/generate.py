@@ -21,7 +21,7 @@ def generate_random_seed():
     import random
     return random.randint(0, 2**32 - 1)
 
-def generate_images(positive_prompt, negative_prompt=None, width=1024, height=1024, steps=20, seed=None, model='lumina'):
+def generate_images(positive_prompt, negative_prompt=None, width=1024, height=1024, steps=20, seed=None, model='lumina', checkpoint=None, lora=None):
     """Generar imágenes usando ComfyUI
     
     Args:
@@ -32,12 +32,46 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
         steps: Número de pasos de inferencia
         seed: Semilla para la generación (opcional)
         model: Modelo a usar ('lumina' o 'chroma')
+        checkpoint: Nombre del archivo del checkpoint a usar
+        lora: Nombre del archivo del LoRA a usar
     """
     client_id = str(uuid.uuid4())
     
     # Cargar workflow según el modelo seleccionado
     base_workflow = get_workflow_by_model(model)
     workflow = json.loads(json.dumps(base_workflow))
+
+    # --- Modificación para Checkpoint y LoRA dinámicos ---
+    checkpoint_loader_node = None
+    lora_loader_node = None
+    # Encuentra los nodos de Checkpoint y LoRA
+    for node_id, node_data in workflow.items():
+        if node_data.get("class_type") == "CheckpointLoaderSimple":
+            checkpoint_loader_node = node_id
+        if node_data.get("class_type") == "LoraLoader":
+            lora_loader_node = node_id
+
+    # Actualiza el checkpoint si se proporciona
+    if checkpoint and checkpoint_loader_node:
+        workflow[checkpoint_loader_node]["inputs"]["ckpt_name"] = checkpoint
+
+    # Actualiza el LoRA o lo omite
+    if lora_loader_node:
+        if lora:
+            workflow[lora_loader_node]["inputs"]["lora_name"] = lora
+        else:
+            # Si no se proporciona LoRA, se debe "puentear" la conexión
+            # Encuentra el nodo que recibe la salida del LoRA
+            for node_id, node_data in workflow.items():
+                inputs = node_data.get("inputs", {})
+                for input_name, input_value in inputs.items():
+                    if isinstance(input_value, list) and input_value[0] == lora_loader_node:
+                        # Conecta la salida del CheckpointLoader directamente a este nodo
+                        input_value[0] = checkpoint_loader_node
+            # Elimina el nodo LoRA del workflow
+            del workflow[lora_loader_node]
+    # --- Fin de la modificación ---
+
 
     # Detectar nodos automáticamente según el tipo de workflow
     positive_nodes = []

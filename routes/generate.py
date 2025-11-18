@@ -54,7 +54,11 @@ def create_generate_blueprint(app):
             if mode == 'generate':
                 if model not in ('lumina', 'chroma'):
                     return jsonify({"success": False, "error": "Invalid model. Must be 'lumina' or 'chroma'"}), 400
-                result = generate_images(prompt, width=width, height=height, steps=steps, seed=seed, model=model)
+
+                checkpoint = data.get('checkpoint')
+                lora = data.get('lora')
+
+                result = generate_images(prompt, width=width, height=height, steps=steps, seed=seed, model=model, checkpoint=checkpoint, lora=lora)
             else:
                 from domains.edit import generate_image_edit
                 source_image = data.get('image') or {}

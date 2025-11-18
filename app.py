@@ -15,6 +15,7 @@ from routes.auth import create_auth_blueprint
 from routes.generate import create_generate_blueprint
 from routes.video import create_video_blueprint
 from routes.api import create_api_blueprint, load_tags_cache
+from routes.social_routes import create_social_blueprint
 from utils.comfy_config import COMFYUI_URL_GENERATE, COMFYUI_URL_EDIT, COMFYUI_URL_VIDEO
 
 app = Flask(__name__)
@@ -47,6 +48,7 @@ app.register_blueprint(create_auth_blueprint(app, oauth))
 app.register_blueprint(create_generate_blueprint(app))
 app.register_blueprint(create_video_blueprint(app))
 app.register_blueprint(create_api_blueprint(app))
+app.register_blueprint(create_social_blueprint(app))
 
 # Agregar headers de no-caché para archivos estáticos
 @app.after_request

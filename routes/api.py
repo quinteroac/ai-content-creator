@@ -742,5 +742,28 @@ def create_api_blueprint(app):
                 "error": str(e)
             }), 500
 
+    @api_bp.route('/api/models', methods=['GET'])
+    @api_login_required(app)
+    def get_models():
+        """Endpoint to get available models from ComfyUI directories."""
+        base_path = '/app/ComfyUI/models'
+        checkpoints_path = os.path.join(base_path, 'checkpoints')
+        loras_path = os.path.join(base_path, 'loras')
+
+        try:
+            checkpoints = [f for f in os.listdir(checkpoints_path) if os.path.isfile(os.path.join(checkpoints_path, f))] if os.path.exists(checkpoints_path) else []
+            loras = [f for f in os.listdir(loras_path) if os.path.isfile(os.path.join(loras_path, f))] if os.path.exists(loras_path) else []
+
+            return jsonify({
+                'success': True,
+                'models': {
+                    'checkpoints': checkpoints,
+                    'loras': loras
+                }
+            })
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': 'Could not read model directories.'}), 500
+
     return api_bp
 

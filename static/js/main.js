@@ -1,6 +1,10 @@
+import { ProfileSelector } from './components/ProfileSelector.js';
 const { createApp } = Vue;
 
 createApp({
+    components: {
+        ProfileSelector,
+    },
     data() {
         return {
             // Sistema de pasos
@@ -22,6 +26,11 @@ createApp({
             selectedResolution: '960x960',
             selectedSteps: 20, // Pasos de inferencia por defecto
             selectedModel: 'lumina', // Modelo seleccionado (lumina/chroma)
+            selectedCheckpoint: '',
+            selectedLora: '',
+            checkpoints: [],
+            loras: [],
+            selectedProfile: 'anime',
             generationMode: 'generate', // Modo de generación (generate/edit)
             isGenerating: false,
             modalImage: null,
@@ -68,31 +77,29 @@ createApp({
             return this.generationMode === 'edit';
         },
         currentPlaceholder() {
-            if (this.isFlowComplete) {
+            if (this.isFlowComplete && this.selectedProfile === 'anime') {
                 return 'Flow completed. Press "+" to start a new prompt';
             }
             if (this.isImproving) {
-                const isLastStep = this.currentStep === this.steps.length - 1;
-                const isNaturalLanguageStep = this.currentStepInfo?.name === 'Natural-language enrichment';
-                if (isLastStep && isNaturalLanguageStep && this.improveWithAI) {
-                    return 'Converting tags to natural language...';
-                }
                 return 'Improving with AI...';
             }
-            if (this.currentStepInfo) {
-                const stepName = this.currentStepInfo.name;
-                const isLastStep = this.currentStep === this.steps.length - 1;
-                const isNaturalLanguageStep = stepName === 'Natural-language enrichment';
-                
-                // Si es el último paso con IA activada para conversión a lenguaje natural
-                if (isLastStep && isNaturalLanguageStep && this.improveWithAI) {
-                    return 'Press Enter to convert the complete prompt to natural language';
-                }
-                
-                // Para los otros pasos, mostrar el placeholder normal (sin mención de IA)
-                return `${stepName}: ${this.currentStepInfo.placeholder}`;
+
+            switch (this.selectedProfile) {
+                case 'anime':
+                    if (this.promptMode === 'direct') {
+                        return 'Describe what you want to generate...';
+                    }
+                    if (this.currentStepInfo) {
+                         return `${this.currentStepInfo.name}: ${this.currentStepInfo.placeholder}`;
+                    }
+                    return 'Type to generate';
+                case 'photorealistic':
+                    return 'Enter a photorealistic prompt (e.g., "photo of a woman in a red dress, detailed skin texture")';
+                case 'artistic':
+                    return 'Enter an artistic prompt (e.g., "oil painting of a landscape, style of Van Gogh")';
+                default:
+                    return 'Type to generate';
             }
-            return 'Type to generate';
         },
         progressPercentage() {
             if (this.currentStep >= 0 && this.currentStep < this.steps.length) {
@@ -145,6 +152,7 @@ createApp({
         });
 
         this.fetchComfyEndpoint();
+        this.fetchModels();
         this.checkDriveStatus();
         
         // Verificar si viene de autorización exitosa de Drive
@@ -1353,6 +1361,67 @@ createApp({
             } catch (error) {
                 console.error('[DEBUG] convertToNaturalLanguage: Error de conexión:', error);
                 return null;
+            }
+        },
+
+        async fetchModels() {
+            try {
+                const response = await fetch('/api/models');
+                const data = await response.json();
+                if (data.success) {
+                    this.checkpoints = data.models.checkpoints;
+                    this.loras = data.models.loras;
+                    if (this.checkpoints.length > 0) {
+                        this.selectedCheckpoint = this.checkpoints[0];
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching models:', error);
+            }
+        },
+        updateProfile(profile) {
+            this.selectedProfile = profile;
+        },
+        async shareOnTwitter(image) {
+            const status = prompt("Enter a status for your tweet:", "Generated with #AIContentCreator");
+            if (status === null) return;
+
+            try {
+                const imageUrl = new URL(this.getImageUrl(image), window.location.origin).href;
+
+                const response = await fetch('/api/social/twitter/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_url: imageUrl, status: status })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Successfully posted to Twitter!');
+                } else if (data.requires_auth) {
+                    if (confirm("You need to authorize with Twitter first. Authorize now?")) {
+                        this.authorizeTwitter();
+                    }
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`An error occurred: ${error.message}`);
+            }
+        },
+
+        async authorizeTwitter() {
+            try {
+                const response = await fetch('/api/social/twitter/authorize');
+                const data = await response.json();
+                if (data.success && data.authorization_url) {
+                    window.location.href = data.authorization_url;
+                } else {
+                    alert(`Could not start Twitter authorization: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`An error occurred: ${error.message}`);
             }
         }
     }
