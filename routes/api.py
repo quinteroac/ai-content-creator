@@ -438,8 +438,16 @@ def create_api_blueprint(app):
             excluded_tags = request.args.get('excluded', '').split(',')
             excluded_tags = [tag.strip() for tag in excluded_tags if tag.strip()]
             
+            # Get the search query for autocomplete
+            query = request.args.get('q', '').strip()
+            
             from utils.db import get_tags_by_category
-            tags = get_tags_by_category(csv_category, limit=40, excluded_tags=excluded_tags)
+            tags = get_tags_by_category(
+                csv_category, 
+                limit=40, 
+                excluded_tags=excluded_tags,
+                query=query if query else None
+            )
             
             return jsonify({
                 "success": True,

@@ -77,24 +77,86 @@ def import_tags_from_csv(conn):
         print(f"[DB] Error importing tags: {e}")
         conn.rollback()
 
-def get_tags_by_category(category, limit=40, excluded_tags=None):
-    """Get top tags for a category, optionally excluding some."""
+def get_tags_by_category(category, limit=40, excluded_tags=None, query=None):
+    """Get top tags for a category, optionally excluding some and filtering by name."""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    query = "SELECT name FROM tags WHERE category = ?"
+    sql_query = "SELECT name FROM tags WHERE category = ?"
     params = [category]
+    
+    if query:
+        sql_query += " AND name LIKE ?"
+        params.append(f"%{query}%")
     
     if excluded_tags:
         placeholders = ','.join(['?'] * len(excluded_tags))
-        query += f" AND name NOT IN ({placeholders})"
+        sql_query += f" AND name NOT IN ({placeholders})"
         params.extend(excluded_tags)
         
-    query += " ORDER BY post_count DESC LIMIT ?"
+    sql_query += " ORDER BY post_count DESC LIMIT ?"
     params.append(limit)
     
-    cursor.execute(query, params)
+    cursor.execute(sql_query, params)
     tags = [row['name'] for row in cursor.fetchall()]
     
     conn.close()
     return tags
+
+def upsert_tags(tags_data):
+    """
+    Bulk insert or update tags in the database.
+    tags_data: list of dicts with keys 'name', 'category', 'post_count'
+    """
+    if not tags_data:
+        return 0
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Use INSERT OR REPLACE to handle updates
+        cursor.executemany('''
+            INSERT INTO tags (name, category, post_count)
+            VALUES (:name, :category, :post_count)
+            ON CONFLICT(id) DO UPDATE SET
+                post_count = excluded.post_count,
+                category = excluded.category
+        ''', tags_data)
+        
+        # Since we don't have a unique constraint on name yet, we should probably add one
+        # or handle duplicates by name. For now, let's assume we might want to clean up duplicates later
+        # or better yet, let's add a unique constraint on name if it doesn't exist, 
+        # but that requires schema migration.
+        # For a simple "small scraper", let's check if tag exists by name and update, otherwise insert.
+        # Actually, doing it one by one or using a better query is safer if we don't have unique constraint on name.
+        
+        # Let's try a more robust approach for SQLite without unique constraint on name (if it's not there)
+        # But wait, the schema in init_db doesn't show unique constraint on name.
+        # Let's check if we can add it or just handle it in python for now to be safe, 
+        # or use a specific query.
+        
+        count = 0
+        for tag in tags_data:
+            cursor.execute('SELECT id FROM tags WHERE name = ?', (tag['name'],))
+            row = cursor.fetchone()
+            
+            if row:
+                cursor.execute('''
+                    UPDATE tags SET post_count = ?, category = ? WHERE id = ?
+                ''', (tag['post_count'], tag['category'], row['id']))
+            else:
+                cursor.execute('''
+                    INSERT INTO tags (name, category, post_count) VALUES (?, ?, ?)
+                ''', (tag['name'], tag['category'], tag['post_count']))
+            count += 1
+            
+        conn.commit()
+        return count
+        
+    except Exception as e:
+        print(f"[DB] Error upserting tags: {e}")
+        conn.rollback()
+        return 0
+    finally:
+        conn.close()

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,8 +10,10 @@
     <title>AI Content Creator</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/image.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/controls-premium.css') }}">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
+
 <body>
     {% raw %}
     <div id="app">
@@ -18,7 +21,8 @@
             <div class="logo-section">
                 <div class="logo-icon-bg">
                     <svg viewBox="0 0 24 24" class="logo-icon" fill="none" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                     </svg>
                 </div>
                 <span class="logo-text">AI Content Creator</span>
@@ -26,22 +30,28 @@
             <div class="header-controls">
                 <button class="header-icon-button" title="Settings" @click="openSettings">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M19.5 13.5a7.8 7.8 0 0 0 0-3l2-1.6-1.5-3-2.4.9a7.9 7.9 0 0 0-2.6-1.5L14.7 2h-3.4l-.3 3.3a7.9 7.9 0 0 0-2.6 1.5l-2.4-.9-1.5 3 2 1.6a7.8 7.8 0 0 0 0 3l-2 1.6 1.5 3 2.4-.9a7.9 7.9 0 0 0 2.6 1.5l.3 3.3h3.4l.3-3.3a7.9 7.9 0 0 0 2.6-1.5l2.4.9 1.5-3-2-1.6z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z" stroke="currentColor"
+                            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                        <path
+                            d="M19.5 13.5a7.8 7.8 0 0 0 0-3l2-1.6-1.5-3-2.4.9a7.9 7.9 0 0 0-2.6-1.5L14.7 2h-3.4l-.3 3.3a7.9 7.9 0 0 0-2.6 1.5l-2.4-.9-1.5 3 2 1.6a7.8 7.8 0 0 0 0 3l-2 1.6 1.5 3 2.4-.9a7.9 7.9 0 0 0 2.6 1.5l.3 3.3h3.4l.3-3.3a7.9 7.9 0 0 0 2.6-1.5l2.4.9 1.5-3-2-1.6z"
+                            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                 </button>
                 <div class="header-divider"></div>
                 <a href="{{ url_for('logout') }}" class="logout-icon" title="Logout">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M12 19a7 7 0 110-14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <path d="M12 19a7 7 0 110-14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                            stroke-linejoin="round" />
                     </svg>
                 </a>
             </div>
         </header>
-        
+
         <!-- Progress indicator para modo interactivo (parte superior) -->
-        <div v-if="promptMode === 'interactive' && currentStep >= 0 && currentStep < steps.length" class="step-indicator-top">
+        <div v-if="promptMode === 'interactive' && currentStep >= 0 && currentStep < steps.length"
+            class="step-indicator-top">
             <div class="step-progress-bar">
                 <div class="step-progress-fill" :style="{ width: progressPercentage + '%' }"></div>
             </div>
@@ -50,7 +60,7 @@
                 <span class="step-name">{{ currentStepInfo?.name }}</span>
             </div>
         </div>
-        
+
         <div class="inner-container">
             <!-- Hero Section (Empty State) -->
             <div v-if="chatMessages.length === 0" class="hero-section">
@@ -58,29 +68,28 @@
                     <h1 class="hero-title">What will you <span class="text-gradient">create</span> today?</h1>
                     <p class="hero-subtitle">Enter a prompt to generate anime-style images.</p>
                     <div class="hero-chips">
-                        <button class="hero-chip" @click="currentInput = 'Cyberpunk City, neon lights, rain'; directPrompt = 'Cyberpunk City, neon lights, rain'">
+                        <button class="hero-chip"
+                            @click="currentInput = 'Cyberpunk City, neon lights, rain'; directPrompt = 'Cyberpunk City, neon lights, rain'">
                             <span class="chip-icon">🏙️</span> Cyberpunk City
                         </button>
-                        <button class="hero-chip" @click="currentInput = 'Magical Girl, casting spell, sparkles'; directPrompt = 'Magical Girl, casting spell, sparkles'">
+                        <button class="hero-chip"
+                            @click="currentInput = 'Magical Girl, casting spell, sparkles'; directPrompt = 'Magical Girl, casting spell, sparkles'">
                             <span class="chip-icon">✨</span> Magical Girl
                         </button>
-                        <button class="hero-chip" @click="currentInput = 'Space Station, futuristic, stars'; directPrompt = 'Space Station, futuristic, stars'">
+                        <button class="hero-chip"
+                            @click="currentInput = 'Space Station, futuristic, stars'; directPrompt = 'Space Station, futuristic, stars'">
                             <span class="chip-icon">🚀</span> Space Station
                         </button>
                     </div>
                 </div>
             </div>
             <div class="images-container">
-                <div 
-                    v-for="message in chatMessages" 
-                    :key="message.id" 
-                    class="chat-message"
-                >
+                <div v-for="message in chatMessages" :key="message.id" class="chat-message">
                     <!-- Mensaje del usuario -->
                     <div class="user-message">
                         <div class="user-message-text">{{ message.userMessage }}</div>
                     </div>
-                    
+
                     <!-- Respuesta -->
                     <div class="response-message">
                         <!-- Indicador de carga -->
@@ -89,61 +98,50 @@
                             <span></span>
                             <span></span>
                         </div>
-                        
+
                         <!-- Error -->
                         <div v-if="message.response.error" class="error">
                             {{ message.response.error }}
                         </div>
-                        
+
                         <!-- Imágenes generadas -->
-                        <div 
-                            v-for="(image, index) in message.response.images" 
-                            :key="index"
-                            class="image-wrapper"
-                        >
-                            <img 
-                                :src="getImageUrl(image)" 
-                                :alt="`Generated image ${index + 1}`"
-                                loading="lazy"
-                            />
+                        <div v-for="(image, index) in message.response.images" :key="index" class="image-wrapper">
+                            <img :src="getImageUrl(image)" :alt="`Generated image ${index + 1}`" loading="lazy" />
                             <div class="download-overlay">
-                                <button 
-                                    class="view-full-btn"
-                                    @click="showFullSize(image)"
-                                    title="View Full Size"
-                                >
-                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                <button class="view-full-btn" @click="showFullSize(image)" title="View Full Size">
+                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                     </svg>
                                 </button>
-                                <button 
-                                    class="generate-video-btn"
-                                    @click.stop="openVideoGenerator(image)"
-                                    title="Generate Video"
-                                >
-                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5.5v13a1.5 1.5 0 002.287 1.264l10.5-6.5a1.5 1.5 0 000-2.528l-10.5-6.5A1.5 1.5 0 004 5.5z"></path>
+                                <button class="generate-video-btn" @click.stop="openVideoGenerator(image)"
+                                    title="Generate Video">
+                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 5.5v13a1.5 1.5 0 002.287 1.264l10.5-6.5a1.5 1.5 0 000-2.528l-10.5-6.5A1.5 1.5 0 004 5.5z">
+                                        </path>
                                     </svg>
                                 </button>
-                                <a 
-                                    :href="image.dataUrl ? image.dataUrl : getImageUrl(image) + '&download=1'"
-                                    class="download-btn"
-                                    :download="image.filename || 'image.png'"
-                                    @click.stop
-                                    title="Download"
-                                >
-                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"></path>
+                                <a :href="image.dataUrl ? image.dataUrl : getImageUrl(image) + '&download=1'"
+                                    class="download-btn" :download="image.filename || 'image.png'" @click.stop
+                                    title="Download">
+                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3">
+                                        </path>
                                     </svg>
                                 </a>
-                                <button 
-                                    class="drive-upload-btn"
-                                    @click.stop="uploadToDrive(image)"
+                                <button class="drive-upload-btn" @click.stop="uploadToDrive(image)"
                                     :disabled="isUploadingToDrive"
-                                    :title="driveAuthenticated ? 'Upload to Google Drive' : 'Authorize Google Drive'"
-                                >
-                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                    :title="driveAuthenticated ? 'Upload to Google Drive' : 'Authorize Google Drive'">
+                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                        xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                                        </path>
                                     </svg>
                                 </button>
                             </div>
@@ -152,200 +150,136 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="input-group">
-            <!-- Contenedor de tags (arriba del textarea, fuera del contenedor, solo modo interactivo) -->
-            <div 
-                v-if="promptMode === 'interactive' && currentStepInfo" 
-                class="tags-container-above"
-            >
-                <!-- Tags y botón de renovar en la misma fila -->
-                <div class="tags-row">
-                    <div class="tags-group">
-                        <button
-                            v-for="(tag, index) in displayedTags"
-                            :key="`tag-${tag}-${index}`"
-                            @click="selectTag(tag)"
-                            class="tag-button"
-                            :style="getTagButtonStyle(index)"
-                            :title="tag"
-                        >
-                            {{ truncateTag(tag) }}
-                        </button>
-                    </div>
-                    <button
-                        @click="loadMoreTags"
-                        class="renew-tags-btn-inline"
-                        :disabled="isGenerating || isImproving"
-                        title="Renovar tags"
-                    >
-                        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            
+
             <!-- Contenedor unificado para ambos modos -->
             <div class="prompt-textfield-container">
                 <!-- Botón Nuevo Prompt / Adjuntar (dentro del textfield, izquierda) -->
-                <button 
-                    v-if="!isEditMode"
-                    class="prompt-control-btn new-prompt-inline"
-                    @click="startNewPrompt()"
-                    :disabled="isGenerating || isImproving"
-                    title="New Prompt"
-                >
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <button v-if="!isEditMode" class="prompt-control-btn new-prompt-inline" @click="startNewPrompt()"
+                    :disabled="isGenerating || isImproving" title="New Prompt">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
                 </button>
-                <button 
-                    v-else
-                    class="prompt-control-btn attach-btn-inline"
-                    @click="triggerImageUpload"
-                    :disabled="isGenerating || isImproving || isUploadingImage"
-                    title="Attach Image"
-                >
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 7.5v9a4.5 4.5 0 01-9 0v-9a3 3 0 016 0v9a1.5 1.5 0 01-3 0V7.5"></path>
+                <button v-else class="prompt-control-btn attach-btn-inline" @click="triggerImageUpload"
+                    :disabled="isGenerating || isImproving || isUploadingImage" title="Attach Image">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M16.5 7.5v9a4.5 4.5 0 01-9 0v-9a3 3 0 016 0v9a1.5 1.5 0 01-3 0V7.5"></path>
                     </svg>
                 </button>
-                <input 
-                    ref="imageUploader"
-                    type="file"
-                    class="hidden-file-input"
-                    accept="image/*"
-                    @change="handleImageUpload"
-                />
-                
+                <input ref="imageUploader" type="file" class="hidden-file-input" accept="image/*"
+                    @change="handleImageUpload" />
+
                 <!-- Botón Generar (dentro del textfield, derecha) -->
-                <button 
-                    v-if="!isGenerating"
-                    @click="handleInput" 
-                    class="generate-btn-inline"
-                    :disabled="isImproving || (promptMode === 'interactive' && isFlowComplete)"
-                    title="Generate"
-                >
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                <button v-if="!isGenerating" @click="handleInput" class="generate-btn-inline"
+                    :disabled="isImproving || (promptMode === 'interactive' && isFlowComplete)" title="Generate">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
                     </svg>
                 </button>
-                <button
-                    v-else
-                    class="generate-btn-inline stop-btn"
-                    @click="stopGeneration"
-                    :disabled="isStoppingGeneration"
-                    title="Stop generation"
-                >
+                <button v-else class="generate-btn-inline stop-btn" @click="stopGeneration"
+                    :disabled="isStoppingGeneration" title="Stop generation">
                     <span v-if="isStoppingGeneration" class="stop-label">Stopping...</span>
-                    <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
                         <rect x="7" y="7" width="10" height="10" rx="2"></rect>
                     </svg>
                 </button>
-                
+
                 <!-- Modo Interactivo: Textarea -->
-                <textarea 
-                    v-if="promptMode === 'interactive'"
-                    v-model="currentInput"
-                    @keydown.enter.exact.prevent="handleInput"
+                <textarea v-if="promptMode === 'interactive'" v-model="currentInput"
+                    @keydown.enter.exact.prevent="handleInput" @keydown="handleSuggestionKeydown"
                     :placeholder="isImproving ? 'Improving with AI...' : currentPlaceholder"
-                    :disabled="isGenerating || isImproving || isFlowComplete"
-                    class="prompt-textarea-field"
-                    ref="promptInput"
-                ></textarea>
-                
+                    :disabled="isGenerating || isImproving || isFlowComplete" class="prompt-textarea-field"
+                    ref="promptInput"></textarea>
+
+                <!-- Suggestions Dropdown (only in interactive mode) -->
+                <div v-if="promptMode === 'interactive' && showSuggestions && tagSuggestions.length > 0"
+                    class="tag-suggestions-dropdown">
+                    <div v-for="(tag, index) in tagSuggestions" :key="tag" class="suggestion-item"
+                        :class="{ 'selected': index === selectedSuggestionIndex }" @click="selectSuggestion(tag)"
+                        @mouseenter="selectedSuggestionIndex = index">
+                        {{ tag }}
+                    </div>
+                </div>
+
                 <!-- Modo Directo: Textarea -->
-                <textarea 
-                    v-if="promptMode === 'direct'"
-                    v-model="directPrompt"
-                    @keydown.enter.exact.prevent="handleInput"
-                    placeholder="Describe what you want to generate..."
-                    class="prompt-textarea-field"
-                    :disabled="isGenerating || isImproving"
-                    ref="directPromptInput"
-                ></textarea>
-                
+                <textarea v-if="promptMode === 'direct'" v-model="directPrompt"
+                    @keydown.enter.exact.prevent="handleInput" placeholder="Describe what you want to generate..."
+                    class="prompt-textarea-field" :disabled="isGenerating || isImproving"
+                    ref="directPromptInput"></textarea>
+
                 <!-- Controles embebidos -->
                 <div class="prompt-controls">
                     <div class="prompt-controls-left">
                         <!-- Prompt Mode Toggle -->
-                        <button 
-                            class="prompt-control-btn"
-                            :class="{ 'active': promptMode === 'interactive' }"
-                            @click="togglePromptMode()"
-                            :disabled="isGenerating || isImproving"
-                            title="Mode: {{ promptMode === 'interactive' ? 'Interactive' : 'Direct' }}"
-                        >
+                        <button class="prompt-control-btn" :class="{ 'active': promptMode === 'interactive' }"
+                            @click="togglePromptMode()" :disabled="isGenerating || isImproving"
+                            title="Mode: {{ promptMode === 'interactive' ? 'Interactive' : 'Direct' }}">
                             <template v-if="promptMode === 'interactive'">
-                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"></path>
+                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155">
+                                    </path>
                                 </svg>
                             </template>
                             <template v-else>
-                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path>
+                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z">
+                                    </path>
                                 </svg>
                             </template>
                         </button>
-                        
+
                         <!-- Enrichment Toggle -->
-                        <button 
-                            class="prompt-control-btn"
-                            :class="{ 'active': improveWithAI }"
-                            @click="improveWithAI = !improveWithAI"
-                            :disabled="isGenerating || isImproving"
-                            title="Enrichment: {{ improveWithAI ? 'Enabled' : 'Disabled' }}"
-                        >
+                        <button class="prompt-control-btn" :class="{ 'active': improveWithAI }"
+                            @click="improveWithAI = !improveWithAI" :disabled="isGenerating || isImproving"
+                            title="Enrichment: {{ improveWithAI ? 'Enabled' : 'Disabled' }}">
                             <template v-if="isImproving">
-                                <svg class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path>
+                                <svg class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99">
+                                    </path>
                                 </svg>
                             </template>
                             <template v-else>
-                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"></path>
+                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z">
+                                    </path>
                                 </svg>
                             </template>
                         </button>
                     </div>
-                    
+
                     <!-- Aspect Ratio Select (lado derecho) -->
                     <div class="prompt-controls-right">
-                        <select 
-                            v-model="generationMode" 
-                            class="generation-mode-select" 
-                            :disabled="isGenerating || isImproving"
-                            title="Generation Mode"
-                        >
+                        <select v-model="generationMode" class="generation-mode-select"
+                            :disabled="isGenerating || isImproving" title="Generation Mode">
                             <option value="generate">Generate</option>
                             <option value="edit">Edit</option>
                         </select>
-                        <input 
-                            type="number"
-                            v-model.number="selectedSteps"
-                            class="steps-input"
-                            :disabled="isGenerating || isImproving"
-                            min="1"
-                            max="200"
-                            title="Inference Steps"
-                        />
-                        <select 
-                            v-model="selectedModel"
-                            class="model-select"
-                            :disabled="isGenerating || isImproving || generationMode === 'edit'"
-                            title="Model"
-                        >
+                        <input type="number" v-model.number="selectedSteps" class="steps-input"
+                            :disabled="isGenerating || isImproving" min="1" max="200" title="Inference Steps" />
+                        <select v-model="selectedModel" class="model-select"
+                            :disabled="isGenerating || isImproving || generationMode === 'edit'" title="Model">
                             <option value="lumina">Lumina</option>
                             <option value="chroma">Chroma</option>
                             <option value="qwen">Qwen</option>
                         </select>
-                        <select 
-                            v-model="selectedResolution" 
-                            class="aspect-ratio-select"
-                            :disabled="isGenerating || isImproving"
-                            title="Aspect Ratio"
-                        >
+                        <select v-model="selectedResolution" class="aspect-ratio-select"
+                            :disabled="isGenerating || isImproving" title="Aspect Ratio">
                             <option value="960x960">Square</option>
                             <option value="784x1168">Portrait</option>
                             <option value="1168x784">Landscape</option>
@@ -354,76 +288,55 @@
                 </div>
             </div>
         </div>
-        
+
         <div v-if="showSettingsModal" class="settings-modal-backdrop" @click.self="closeSettings">
             <div class="settings-modal">
                 <h2 class="settings-title">Settings</h2>
                 <div class="settings-section">
                     <h3 class="settings-section-title">ComfyUI Endpoints</h3>
                     <label class="settings-label" for="settings-comfy-endpoint-generate">Generate Endpoint</label>
-                    <input
-                        id="settings-comfy-endpoint-generate"
-                        class="settings-input"
-                        type="text"
-                        v-model="settingsEndpoints.generate"
-                        @input="handleSettingsInput"
-                        placeholder="http://localhost:8188"
-                        :disabled="isSavingSettings"
-                    />
+                    <input id="settings-comfy-endpoint-generate" class="settings-input" type="text"
+                        v-model="settingsEndpoints.generate" @input="handleSettingsInput"
+                        placeholder="http://localhost:8188" :disabled="isSavingSettings" />
                     <label class="settings-label" for="settings-comfy-endpoint-edit">Edit Endpoint</label>
-                    <input
-                        id="settings-comfy-endpoint-edit"
-                        class="settings-input"
-                        type="text"
-                        v-model="settingsEndpoints.edit"
-                        @input="handleSettingsInput"
-                        placeholder="http://localhost:8189"
-                        :disabled="isSavingSettings"
-                    />
+                    <input id="settings-comfy-endpoint-edit" class="settings-input" type="text"
+                        v-model="settingsEndpoints.edit" @input="handleSettingsInput"
+                        placeholder="http://localhost:8189" :disabled="isSavingSettings" />
                     <label class="settings-label" for="settings-comfy-endpoint-video">Video Endpoint</label>
-                    <input
-                        id="settings-comfy-endpoint-video"
-                        class="settings-input"
-                        type="text"
-                        v-model="settingsEndpoints.video"
-                        @input="handleSettingsInput"
-                        placeholder="http://localhost:8190"
-                        :disabled="isSavingSettings"
-                    />
+                    <input id="settings-comfy-endpoint-video" class="settings-input" type="text"
+                        v-model="settingsEndpoints.video" @input="handleSettingsInput"
+                        placeholder="http://localhost:8190" :disabled="isSavingSettings" />
                 </div>
                 <p v-if="settingsError" class="settings-feedback settings-error">{{ settingsError }}</p>
                 <p v-if="settingsSaved" class="settings-feedback settings-success">Endpoints updated successfully.</p>
                 <div class="settings-actions">
-                    <button class="settings-button secondary" type="button" @click="closeSettings" :disabled="isSavingSettings">Cancel</button>
-                    <button class="settings-button primary" type="button" @click="saveSettings" :disabled="isSavingSettings">
+                    <button class="settings-button secondary" type="button" @click="closeSettings"
+                        :disabled="isSavingSettings">Cancel</button>
+                    <button class="settings-button primary" type="button" @click="saveSettings"
+                        :disabled="isSavingSettings">
                         <span v-if="isSavingSettings">Saving...</span>
                         <span v-else>Save</span>
                     </button>
                 </div>
             </div>
         </div>
-        
+
         <!-- Modal para vista a tamaño completo -->
-        <div 
-            v-if="modalImage" 
-            class="modal" 
-            @click="closeModal"
-        >
+        <div v-if="modalImage" class="modal" @click="closeModal">
             <button class="modal-close" @click="closeModal">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
                 </svg>
             </button>
-            <img 
-                class="modal-content" 
-                :src="modalImageUrl"
-                @click.stop
-            />
-        </div>
+            <img class="modal-content" :src="modalImageUrl" @click.stop />
         </div>
     </div>
+    </div>
     {% endraw %}
-    
+
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
+
 </html>
