@@ -81,11 +81,19 @@ except Exception as e:
     print(f"Warning: No se pudo cargar el workflow de Chroma: {e}")
     print("El workflow de Chroma no estará disponible")
 
+# Cargar workflow de Qwen
+QWEN_WORKFLOW = None
+try:
+    QWEN_WORKFLOW = load_workflow('workflows/text-to-image/text-to-image-qwen-edit.json', 'workflows/text-to-image/text-to-image-qwen-edit.json')
+except Exception as e:
+    print(f"Warning: No se pudo cargar el workflow de Qwen: {e}")
+    print("El modelo Qwen no estará disponible")
+
 def get_workflow_by_model(model='lumina'):
     """Obtener el workflow según el modelo seleccionado
     
     Args:
-        model: Modelo a usar ('lumina' o 'chroma')
+        model: Modelo a usar ('lumina', 'chroma' o 'qwen')
     
     Returns:
         Workflow JSON correspondiente al modelo
@@ -96,11 +104,16 @@ def get_workflow_by_model(model='lumina'):
             print(f"Warning: Chroma workflow no disponible, usando Lumina por defecto")
             return BASE_WORKFLOW
         return CHROMA_WORKFLOW
+    if model_lower == 'qwen':
+        if QWEN_WORKFLOW is None:
+            print("Warning: Qwen workflow no disponible, usando Lumina por defecto")
+            return BASE_WORKFLOW
+        return QWEN_WORKFLOW
     else:
         return BASE_WORKFLOW
 
 try:
-    EDIT_WORKFLOW = load_workflow(EDIT_WORKFLOW_PATH, 'workflows/edit-image/edit-image-qwen-2509.json')
+    EDIT_WORKFLOW = load_workflow(EDIT_WORKFLOW_PATH, 'workflows/edit-image/edit-image-qwen-2509-aio.json')
 except Exception as e:
     print(f"Error fatal: No se pudo cargar el workflow de edición: {e}")
     print("Asegúrate de que el archivo workflows/edit-image/edit-image-qwen-2509.json existe")

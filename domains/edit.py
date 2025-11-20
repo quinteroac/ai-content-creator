@@ -5,18 +5,60 @@ import json
 import uuid
 from utils.workflow import EDIT_WORKFLOW, find_save_image_nodes
 from utils.comfy import queue_prompt, wait_for_completion
-from utils.media import persist_media_locally, upload_image_data_url_to_comfy, upload_local_media_to_comfy, upload_image_to_comfy
+from utils.media import (
+    persist_media_locally,
+    upload_image_data_url_to_comfy,
+    upload_local_media_to_comfy,
+    upload_image_to_comfy,
+)
 
 def generate_random_seed():
     """Generar una semilla aleatoria para la generación de imágenes"""
     import random
     return random.randint(0, 2**32 - 1)
 
+def _find_nodes_by_class(workflow, class_types):
+    """Obtener todos los nodos cuyo class_type esté en class_types."""
+    class_set = set(class_types)
+    return [
+        node_id
+        for node_id, node_data in workflow.items()
+        if isinstance(node_data, dict) and node_data.get("class_type") in class_set
+    ]
+
+
+def _find_first_node_by_class(workflow, class_types):
+    """Obtener el primer nodo que coincida con class_types."""
+    nodes = _find_nodes_by_class(workflow, class_types)
+    return nodes[0] if nodes else None
+
+
+def _get_prompt_text(inputs):
+    if not isinstance(inputs, dict):
+        return ""
+    return inputs.get("text") or inputs.get("prompt") or ""
+
+
+def _set_prompt_text(inputs, value):
+    if not isinstance(inputs, dict):
+        return
+    if "text" in inputs:
+        inputs["text"] = value
+    elif "prompt" in inputs:
+        inputs["prompt"] = value
+    else:
+        inputs["text"] = value
+
+
 def generate_image_edit(positive_prompt, source_image, width=None, height=None, steps=20, seed=None):
-    """Editar una imagen existente usando el workflow de Qwen Image Edit"""
-    if not source_image or not source_image.get('filename'):
-        if not source_image or not source_image.get('data_url'):
-            raise ValueError("No source image provided for edit mode")
+    """Editar una imagen existente usando el workflow Qwen AIO."""
+    if not EDIT_WORKFLOW:
+        raise ValueError("Edit workflow is not available")
+
+    if not source_image or (
+        not source_image.get('filename') and not source_image.get('data_url')
+    ):
+        raise ValueError("No source image provided for edit mode")
 
     workflow = json.loads(json.dumps(EDIT_WORKFLOW))
 
@@ -40,42 +82,56 @@ def generate_image_edit(positive_prompt, source_image, width=None, height=None, 
             mode='edit'
         )
 
-    if "78" in workflow:
-        workflow["78"]["inputs"]["image"] = upload_name
+    load_image_node = _find_first_node_by_class(workflow, {"LoadImage", "LoadImageMask"})
+    if load_image_node and "inputs" in workflow[load_image_node]:
+        workflow[load_image_node]["inputs"]["image"] = upload_name
 
-    if "111" in workflow and "inputs" in workflow["111"]:
-        workflow["111"]["inputs"]["prompt"] = positive_prompt or ""
-    if "110" in workflow and "inputs" in workflow["110"]:
-        workflow["110"]["inputs"]["prompt"] = ""
+    positive_nodes = [
+        node_id for node_id, node_data in workflow.items()
+        if isinstance(node_data, dict)
+        and node_data.get("class_type") in ("TextEncodeQwenImageEditPlus", "CLIPTextEncode")
+        and "positive" in node_data.get("_meta", {}).get("title", "").lower()
+    ]
+    if not positive_nodes:
+        positive_nodes = _find_nodes_by_class(workflow, {"TextEncodeQwenImageEditPlus"})
 
+    for node_id in positive_nodes:
+        _set_prompt_text(workflow.get(node_id, {}).get("inputs", {}), positive_prompt or "")
+
+    latent_nodes = _find_nodes_by_class(workflow, {"EmptyLatentImage", "EmptySD3LatentImage"})
     if width is not None and height is not None:
         try:
             w = int(width)
             h = int(height)
-            if "112" in workflow and "inputs" in workflow["112"]:
-                workflow["112"]["inputs"]["width"] = w
-                workflow["112"]["inputs"]["height"] = h
-            megapixels = max((w * h) / 1_000_000, 0.1)
-            if "93" in workflow and "inputs" in workflow["93"]:
-                workflow["93"]["inputs"]["megapixels"] = round(megapixels, 2)
+            for node_id in latent_nodes:
+                inputs = workflow.get(node_id, {}).get("inputs", {})
+                if isinstance(inputs, dict):
+                    inputs["width"] = w
+                    inputs["height"] = h
         except (ValueError, TypeError):
             pass
 
     steps_value = int(steps)
     seed_value = int(seed) if seed is not None else generate_random_seed()
 
-    if "3" in workflow and "inputs" in workflow["3"]:
-        workflow["3"]["inputs"]["steps"] = steps_value
-        workflow["3"]["inputs"]["seed"] = seed_value
+    sampler_nodes = _find_nodes_by_class(workflow, {"KSampler", "KSamplerAdvanced"})
+    for node_id in sampler_nodes:
+        inputs = workflow.get(node_id, {}).get("inputs", {})
+        if isinstance(inputs, dict):
+            if "steps" in inputs:
+                inputs["steps"] = steps_value
+            if "seed" in inputs:
+                inputs["seed"] = seed_value
 
     client_id = str(uuid.uuid4())
     result = queue_prompt(workflow, client_id, mode='edit')
     prompt_id = result["prompt_id"]
 
+    target_nodes = find_save_image_nodes(workflow)
     images = wait_for_completion(
         client_id,
         prompt_id,
-        target_nodes=["60"],
+        target_nodes=target_nodes,
         media_key="images",
         mode='edit'
     )

@@ -5,8 +5,19 @@
 # Don't exit on error for background processes
 set -e
 
+# Install ComfyUI if not already installed
+if [ ! -d "/app/comfy/ComfyUI" ]; then
+    echo "Installing ComfyUI..."
+    comfy --workspace=/app --skip-prompt install --nvidia
+    echo "Installing civicomfy node registry..."
+    comfy node registry-install civicomfy
+    echo "ComfyUI installation completed."
+else
+    echo "ComfyUI already installed, skipping installation."
+fi
+
 # Change to ComfyUI directory
-cd /root/comfy/ComfyUI
+cd /app/comfy/ComfyUI
 
 # Configurable environment variables
 PORT=${PORT:-8188}
@@ -43,7 +54,7 @@ hf_dl() {
     local local_dir="$1"
     local filename="$2"
     local url="$3"
-    bash /root/comfy_model_downloader.sh hf "$local_dir" "$filename" "$url"
+    bash /app/comfy_model_downloader.sh hf "$local_dir" "$filename" "$url"
 }
 
 # Helper function to download a model from CivitAI
@@ -57,9 +68,29 @@ civitai_dl() {
 # Download necessary models on container start. Each block invokes the corresponding download function.
 # All downloaded files will be placed under /app/ComfyUI/models/<category>/
 
+## NETA YUME LUMINA
 civitai_dl "checkpoints" \
-    "plantMilkModelSuite_walnut.safetensors" \
-    "https://civitai.com/api/download/models/1714002?type=Model&format=SafeTensor&size=pruned&fp=fp16"
+    "netayumeLuminaNetaLumina_v35Pretrained.safetensors" \
+    "https://civitai.com/api/download/models/2298660?type=Model&format=SafeTensor&size=full&fp=bf16"
+civitai_dl "loras" \
+    "netayume_v3.5_lightning_v0.2.safetensors" \
+    "https://civitai.com/api/download/models/2393265?type=Model&format=SafeTensor"
+
+## CHROMA
+civitai_dl "diffusion_models" \
+    "chroma_v10HD.safetensors" \
+    "https://civitai.com/api/download/models/2164239?type=Model&format=SafeTensor&size=full&fp=bf16"
+hf_dl "vae" \
+    "ae.safetensors" \
+    "https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors"
+hf_dl "text_encoders" \
+    "t5xxl_fp16.safetensors" \
+    "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors"
+civitai_dl "loras" \
+    "Chroma-Anime-v3.safetensors" \
+    "https://civitai.com/api/download/models/2275118?type=Model&format=SafeTensor"
+
+## Qwen Edit
 
 hf_dl "vae" \
     "qwen_image_vae.safetensors" \
@@ -77,59 +108,22 @@ hf_dl "loras" \
     "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors" \
     "https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors"
 
-civitai_dl "loras" \
-    "qwen-edit-skin_1.1_000002750.safetensors" \
-    "https://civitai.com/api/download/models/2376235?type=Model&format=SafeTensor"
-
-civitai_dl "loras" \
-    "aldniki_qwen_reality_transform_v01.safetensors" \
-    "https://civitai.com/api/download/models/2157828?type=Model&format=SafeTensor"
-
-civitai_dl "loras" \
-    "lenovo.safetensors" \
-    "https://civitai.com/api/download/models/2106185?type=Model&format=SafeTensor"
-
-hf_dl "vae" \
-    "wan_2.1_vae.safetensors" \
-    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors"
-
-hf_dl "clip" \
-    "nsfw_wan_umt5-xxl_fp8_scaled.safetensors" \
-    "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors"
-
-hf_dl "loras" \
-    "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors" \
-    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors"
-
-hf_dl "loras" \
-    "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors" \
-    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
-
-civitai_dl "diffusion_models" \
-    "wan22RemixT2VI2V_i2vHighV20.safetensors" \
-    "https://civitai.com/api/download/models/2381931?type=Model&format=SafeTensor&size=pruned&fp=fp8"
-
-civitai_dl "diffusion_models" \
-    "wan22RemixT2VI2V_i2vLowV20.safetensors" \
-    "https://civitai.com/api/download/models/2382303?type=Model&format=SafeTensor&size=pruned&fp=fp8"
-
-
 
 # Start Anime Generator web interface in background
-echo "Starting Anime Generator on ${ANIME_GENERATOR_HOST}:${ANIME_GENERATOR_PORT}..."
-cd /app
-COMFYUI_HOST=${COMFYUI_HOST} COMFYUI_PORT=${COMFYUI_PORT} "$PYTHON_BIN" app.py > /tmp/anime_generator.log 2>&1 &
-ANIME_GENERATOR_PID=$!
+#echo "Starting Anime Generator on ${ANIME_GENERATOR_HOST}:${ANIME_GENERATOR_PORT}..."
+#cd /app
+#COMFYUI_HOST=${COMFYUI_HOST} COMFYUI_PORT=${COMFYUI_PORT} "$PYTHON_BIN" app.py > /tmp/anime_generator.log 2>&1 &
+#ANIME_GENERATOR_PID=$!
 
 # Wait a moment for the web server to start
-sleep 2
+#sleep 2
 
 # Check if Anime Generator web server started successfully
-if ! kill -0 $ANIME_GENERATOR_PID 2>/dev/null; then
-    echo "Warning: Anime Generator failed to start. Check logs at /tmp/anime_generator.log"
-else
-    echo "✓ Anime Generator started (PID: $ANIME_GENERATOR_PID)"
-fi
+#if ! kill -0 $ANIME_GENERATOR_PID 2>/dev/null; then
+#    echo "Warning: Anime Generator failed to start. Check logs at /tmp/anime_generator.log"
+#else
+#    echo "✓ Anime Generator started (PID: $ANIME_GENERATOR_PID)"
+#fi
 
 # Start ComfyUI
 echo "Starting ComfyUI on ${HOST}:${PORT}..."

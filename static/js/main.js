@@ -21,7 +21,7 @@ createApp({
             currentInput: '',
             selectedResolution: '960x960',
             selectedSteps: 20, // Pasos de inferencia por defecto
-            selectedModel: 'lumina', // Modelo seleccionado (lumina/chroma)
+            selectedModel: 'qwen', // Modelo seleccionado (lumina/chroma/qwen)
             generationMode: 'generate', // Modo de generación (generate/edit)
             isGenerating: false,
             modalImage: null,

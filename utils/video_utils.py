@@ -28,8 +28,8 @@ def run_subprocess(command, error_message):
 
     return result
 
-def get_video_frame_rate(video_path):
-    """Obtener la tasa de cuadros (fps) de un video usando ffprobe."""
+def _get_frame_rate_with_ffprobe(video_path):
+    """Obtener la tasa de cuadros (fps) usando ffprobe."""
     command = [
         "ffprobe",
         "-v", "error",
@@ -62,8 +62,36 @@ def get_video_frame_rate(video_path):
     except ValueError as exc:
         raise RuntimeError(f"Invalid frame rate reported by ffprobe: {output}") from exc
 
-def get_video_resolution(video_path):
-    """Obtener la resolución de un video (ancho, alto)."""
+
+def _get_frame_rate_with_opencv(video_path):
+    """Fallback para obtener fps con OpenCV."""
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Unable to open video file for frame rate: {video_path}")
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if not fps or fps <= 0:
+            raise RuntimeError("OpenCV returned invalid fps value")
+        return float(fps)
+    finally:
+        cap.release()
+
+
+def get_video_frame_rate(video_path):
+    """Obtener la tasa de cuadros (fps) usando ffprobe u OpenCV como fallback."""
+    try:
+        return _get_frame_rate_with_ffprobe(video_path)
+    except RuntimeError as exc:
+        error_msg = str(exc).lower()
+        if "command not found" in error_msg or "unable to read video frame rate" in error_msg:
+            try:
+                return _get_frame_rate_with_opencv(video_path)
+            except Exception as fallback_exc:
+                raise RuntimeError(f"Unable to determine frame rate using fallback: {fallback_exc}") from exc
+        raise
+
+def _get_resolution_with_ffprobe(video_path):
+    """Intentar obtener resolución usando ffprobe."""
     command = [
         "ffprobe",
         "-v", "error",
@@ -86,6 +114,36 @@ def get_video_resolution(video_path):
         return width_val, height_val
     except ValueError as exc:
         raise RuntimeError(f"Invalid resolution reported by ffprobe: {output}") from exc
+
+
+def _get_resolution_with_opencv(video_path):
+    """Fallback para obtener resolución usando OpenCV cuando ffprobe no está disponible."""
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Unable to open video file for resolution: {video_path}")
+
+    try:
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        if width <= 0 or height <= 0:
+            raise RuntimeError("OpenCV returned invalid width/height")
+        return width, height
+    finally:
+        cap.release()
+
+
+def get_video_resolution(video_path):
+    """Obtener la resolución de un video (ancho, alto) con ffprobe u OpenCV como fallback."""
+    try:
+        return _get_resolution_with_ffprobe(video_path)
+    except RuntimeError as exc:
+        error_msg = str(exc).lower()
+        if "command not found" in error_msg or "unable to read video resolution" in error_msg:
+            try:
+                return _get_resolution_with_opencv(video_path)
+            except Exception as fallback_exc:
+                raise RuntimeError(f"Unable to determine video resolution using fallback: {fallback_exc}") from exc
+        raise
 
 def video_has_audio_stream(video_path):
     """Determinar si un video contiene un stream de audio."""
@@ -121,7 +179,17 @@ def extract_last_frame(video_path):
         "-vframes", "1",
         output_path,
     ]
-    run_subprocess(command, "Unable to extract last frame from video")
+    try:
+        run_subprocess(command, "Unable to extract last frame from video")
+    except RuntimeError as exc:
+        if "command not found" in str(exc).lower():
+            # Fallback: usar OpenCV para extraer el último frame
+            frame_bytes, _, _ = extract_last_frame_as_png(video_path)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            with open(output_path, "wb") as output_file:
+                output_file.write(frame_bytes)
+        else:
+            raise
 
     relative_path = os.path.join("images", output_name).replace("\\", "/")
     return {
@@ -192,27 +260,67 @@ def combine_videos_with_extension(base_video_path, new_video_path, base_metadata
     combined_name = f"video_extension_{uuid.uuid4().hex}.mp4"
     combined_path = os.path.join(OUTPUT_VIDEOS_DIR, combined_name)
 
-    command = [
-        "ffmpeg",
-        "-y",
-        "-i", base_abs,
-        "-i", new_abs,
-        "-filter_complex", filter_complex,
-        "-map", "[outv]",
-        "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "18",
-        "-movflags", "+faststart",
-    ]
+    fallback_required = False
 
-    if include_audio:
-        command.extend(["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"])
+    try:
+        import ffmpeg  # type: ignore
+    except ImportError:
+        ffmpeg = None
+
+    if ffmpeg:
+        try:
+            # Construir pipeline con ffmpeg-python para mayor compatibilidad en Windows
+            input1 = ffmpeg.input(base_abs)
+            input2 = ffmpeg.input(new_abs)
+
+            video_trim = input2.video.trim(start=drop_seconds).setpts('PTS-STARTPTS')
+            concat_streams = ffmpeg.concat(input1.video, video_trim, v=1, a=0)
+
+            audio_stream = None
+            if include_audio:
+                audio_trim = input2.audio.filter('atrim', start=drop_seconds).filter('asetpts', 'PTS-STARTPTS')
+                concat_streams = ffmpeg.concat(input1.video, video_trim, input1.audio, audio_trim, v=1, a=1)
+                audio_stream = concat_streams[1]
+
+            video_stream = concat_streams[0]
+
+            output_kwargs = {
+                'c:v': 'libx264',
+                'preset': 'medium',
+                'crf': 18,
+                'movflags': '+faststart'
+            }
+            if not include_audio:
+                output_kwargs['an'] = None
+
+            if include_audio and audio_stream is not None:
+                stream = ffmpeg.output(video_stream, audio_stream, combined_path, **output_kwargs)
+            else:
+                stream = ffmpeg.output(video_stream, combined_path, **output_kwargs)
+
+            ffmpeg.run(stream, overwrite_output=True)
+        except Exception as exc:
+            fallback_required = True
     else:
-        command.append("-an")
+        fallback_required = True
 
-    command.append(combined_path)
-
-    run_subprocess(command, "Unable to concatenate videos")
+    if fallback_required:
+        print("[WARN] ffmpeg binary/python not available or failed, using OpenCV merge fallback.")
+        fallback_result = merge_videos_excluding_first_frame(base_abs, new_abs)
+        fallback_result.setdefault("combined_from", [])
+        if base_metadata:
+            fallback_result["combined_from"].append({
+                "filename": base_metadata.get("filename"),
+                "local_path": base_metadata.get("local_path") or os.path.relpath(base_abs, OUTPUT_DIR).replace("\\", "/"),
+                "prompt_id": base_metadata.get("prompt_id"),
+            })
+        if new_metadata:
+            fallback_result["combined_from"].append({
+                "filename": new_metadata.get("filename"),
+                "local_path": new_metadata.get("local_path") or os.path.relpath(new_abs, OUTPUT_DIR).replace("\\", "/"),
+                "prompt_id": new_metadata.get("prompt_id"),
+            })
+        return fallback_result
 
     try:
         size_bytes = os.path.getsize(combined_path)
@@ -260,6 +368,8 @@ def combine_videos_with_extension(base_video_path, new_video_path, base_metadata
 
 def merge_videos_excluding_first_frame(first_video_path, second_video_path):
     """Combinar dos videos eliminando el primer fotograma del segundo video."""
+    os.makedirs(OUTPUT_VIDEOS_DIR, exist_ok=True)
+
     cap1 = cv2.VideoCapture(first_video_path)
     if not cap1.isOpened():
         raise ValueError(f"Unable to open first video: {first_video_path}")
@@ -320,7 +430,10 @@ def merge_videos_excluding_first_frame(first_video_path, second_video_path):
         cap1.release()
         cap2.release()
 
-    size = os.path.getsize(merged_path)
+    try:
+        size = os.path.getsize(merged_path)
+    except OSError as exc:
+        raise RuntimeError(f"Unable to finalize merged video: {exc}")
     relative_path = os.path.join("videos", merged_filename).replace("\\", "/")
 
     return {

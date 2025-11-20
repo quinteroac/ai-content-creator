@@ -1,0 +1,145 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 1058479455739315,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "sa_solver",
+      "scheduler": "beta",
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "Qwen-Rapid-AIO-LiteNSFW-v9.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Cargar Punto de Control"
+    }
+  },
+  "5": {
+    "inputs": {
+      "width": [
+        "12",
+        0
+      ],
+      "height": [
+        "12",
+        1
+      ],
+      "batch_size": [
+        "12",
+        2
+      ]
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Imagen Latente Vacía"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "text, watermark",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Codificar Texto CLIP (Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decodificación VAE"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Guardar Imagen"
+    }
+  },
+  "10": {
+    "inputs": {
+      "prompt": "change the color pallete to warm colors",
+      "clip": [
+        "4",
+        1
+      ],
+      "vae": [
+        "4",
+        2
+      ],
+      "image1": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "ComfyUI_temp_tsxng_00089_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Cargar Imagen"
+    }
+  },
+  "12": {
+    "inputs": {
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "Get Image Size"
+    }
+  }
+}

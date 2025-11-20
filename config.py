@@ -77,5 +77,5 @@ ANIME_GENERATOR_HOST = os.environ.get('ANIME_GENERATOR_HOST', get_default('flask
 # Workflow paths
 WORKFLOW_PATH = os.environ.get('LUMINA_WORKFLOW_PATH', get_default('workflows.generate', 'workflows/text-to-image/text-to-image-lumina.json'))
 VIDEO_WORKFLOW_PATH = os.environ.get('VIDEO_WORKFLOW_PATH', get_default('workflows.video', 'workflows/image-to-video/video_wan2_2_14B_i2v_remix.json'))
-EDIT_WORKFLOW_PATH = os.environ.get('EDIT_WORKFLOW_PATH', get_default('workflows.edit', 'workflows/edit-image/edit-image-qwen-2509.json'))
+EDIT_WORKFLOW_PATH = os.environ.get('EDIT_WORKFLOW_PATH', get_default('workflows.edit', 'workflows/edit-image/edit-image-qwen-2509-aio.json'))
 

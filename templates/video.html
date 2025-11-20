@@ -178,6 +178,7 @@
                                 v-model="enableNoSound"
                                 :disabled="isGeneratingVideo || enableNSFW"
                                 class="nsfw-toggle-checkbox"
+                                @change="handleNoSoundToggle"
                             />
                             <span class="nsfw-toggle-text">Sin Sonido</span>
                         </label>

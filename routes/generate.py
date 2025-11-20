@@ -22,7 +22,9 @@ def create_generate_blueprint(app):
             steps = data.get('steps', 20)
             seed = data.get('seed', None)
             mode = (data.get('mode') or 'generate').strip().lower()
-            model = data.get('model', 'lumina').strip().lower() if data.get('model') else 'lumina'
+            default_model = 'qwen'
+            model = data.get('model', default_model)
+            model = model.strip().lower() if isinstance(model, str) else default_model
             
             if mode not in ('generate', 'edit'):
                 return jsonify({"success": False, "error": "Invalid generation mode"}), 400
@@ -52,8 +54,8 @@ def create_generate_blueprint(app):
             
             # Validar modelo solo en modo generate
             if mode == 'generate':
-                if model not in ('lumina', 'chroma'):
-                    return jsonify({"success": False, "error": "Invalid model. Must be 'lumina' or 'chroma'"}), 400
+                if model not in ('lumina', 'chroma', 'qwen'):
+                    return jsonify({"success": False, "error": "Invalid model. Must be 'lumina', 'chroma' or 'qwen'"}), 400
                 result = generate_images(prompt, width=width, height=height, steps=steps, seed=seed, model=model)
             else:
                 from domains.edit import generate_image_edit

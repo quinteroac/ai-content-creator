@@ -1,0 +1,111 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 400220896714844,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "sa_solver",
+      "scheduler": "beta",
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "Qwen-Rapid-AIO-LiteNSFW-v9.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Cargar Punto de Control"
+    }
+  },
+  "5": {
+    "inputs": {
+      "width": 784,
+      "height": 1168,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Imagen Latente Vacía"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "text, watermark",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Codificar Texto CLIP (Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decodificación VAE"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Guardar Imagen"
+    }
+  },
+  "10": {
+    "inputs": {
+      "prompt": "A high-resolution, photorealistic portrait of a 30-year-old woman with natural beauty, standing in a well-lit urban park during golden hour. She has soft, wavy brown hair with subtle highlights, slightly messy strands falling over her face. Her skin has realistic pores, faint freckles, and minor imperfections like a small mole on her cheek. She is wearing a casual white linen shirt with visible fabric texture and light wrinkles, paired with dark jeans. The background features a slightly blurred park scene with trees, benches, and people walking in the distance, creating a natural depth of field. The lighting is soft and natural, with warm sunlight creating gentle shadows on her face and surroundings. Her expression is relaxed, with a faint smile and natural eye reflections. Include subtle details like stray hairs, slight skin oiliness, and realistic depth of field. Add a faint film grain effect to mimic real camera noise, subtle chromatic aberration around the edges, and slight lens flare from the sunlight to enhance realism. Ensure the image has a balanced color tone with warm highlights and cool shadows, and avoid over-saturation or overly smooth textures",
+      "clip": [
+        "4",
+        1
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  }
+}

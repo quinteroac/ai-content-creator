@@ -21,6 +21,25 @@ def generate_random_seed():
     import random
     return random.randint(0, 2**32 - 1)
 
+def _get_prompt_text(inputs):
+    """Obtener el campo de texto/prompt disponible."""
+    if not isinstance(inputs, dict):
+        return ""
+    return inputs.get("text") or inputs.get("prompt") or ""
+
+
+def _set_prompt_text(inputs, value):
+    """Actualizar el texto/prompt respetando el campo disponible."""
+    if not isinstance(inputs, dict):
+        return
+    if "text" in inputs:
+        inputs["text"] = value
+    elif "prompt" in inputs:
+        inputs["prompt"] = value
+    else:
+        inputs["text"] = value
+
+
 def generate_images(positive_prompt, negative_prompt=None, width=1024, height=1024, steps=20, seed=None, model='lumina'):
     """Generar imágenes usando ComfyUI
     
@@ -31,7 +50,7 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
         height: Alto de la imagen
         steps: Número de pasos de inferencia
         seed: Semilla para la generación (opcional)
-        model: Modelo a usar ('lumina' o 'chroma')
+        model: Modelo a usar ('lumina', 'chroma' o 'qwen')
     """
     client_id = str(uuid.uuid4())
     
@@ -48,11 +67,11 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
     noise_nodes = []
     
     # Nodos conocidos por modelo (fallback)
-    known_positive_nodes = {"lumina": ["6", "15"], "chroma": ["748"]}
-    known_negative_nodes = {"lumina": ["7", "16"], "chroma": ["749"]}
-    known_latent_nodes = {"lumina": ["13", "5"], "chroma": ["737"]}
-    known_scheduler_nodes = {"lumina": ["3", "10", "11"], "chroma": ["734"]}
-    known_noise_nodes = {"lumina": [], "chroma": ["718"]}
+    known_positive_nodes = {"lumina": ["6", "15"], "chroma": ["748"], "qwen": ["10"]}
+    known_negative_nodes = {"lumina": ["7", "16"], "chroma": ["749"], "qwen": ["7"]}
+    known_latent_nodes = {"lumina": ["13", "5"], "chroma": ["737"], "qwen": ["5"]}
+    known_scheduler_nodes = {"lumina": ["3", "10", "11"], "chroma": ["734"], "qwen": ["3"]}
+    known_noise_nodes = {"lumina": [], "chroma": ["718"], "qwen": []}
     
     for node_id, node_data in workflow.items():
         if isinstance(node_data, dict):
@@ -62,8 +81,8 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
             title = meta.get("title", "").lower() if meta else ""
             
             # Detectar nodos de prompts por class_type y título
-            if class_type == "CLIPTextEncode":
-                text = inputs.get("text", "").lower()
+            if class_type in ("CLIPTextEncode", "TextEncodeQwenImageEditPlus"):
+                text = _get_prompt_text(inputs).lower()
                 if "positive" in text or "positive" in title or node_id in known_positive_nodes.get(model, []):
                     positive_nodes.append(node_id)
                 elif "negative" in text or "negative" in title or node_id in known_negative_nodes.get(model, []):
@@ -102,7 +121,7 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
     # Actualizar prompts positivos
     base_positive = ""
     for node_id in positive_nodes:
-        base_positive = workflow.get(node_id, {}).get("inputs", {}).get("text", "")
+        base_positive = _get_prompt_text(workflow.get(node_id, {}).get("inputs", {}))
         if base_positive:
             break
 
@@ -117,7 +136,7 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
     
     for node_id in positive_nodes:
         if node_id in workflow and "inputs" in workflow[node_id]:
-            workflow[node_id]["inputs"]["text"] = new_positive
+            _set_prompt_text(workflow[node_id]["inputs"], new_positive)
     
     # Aplicar negative prompt por defecto para Chroma
     if model == 'chroma':
@@ -130,7 +149,7 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
     if negative_prompt:
         base_negative = ""
         for node_id in negative_nodes:
-            base_negative = workflow.get(node_id, {}).get("inputs", {}).get("text", "")
+            base_negative = _get_prompt_text(workflow.get(node_id, {}).get("inputs", {}))
             if base_negative:
                 break
         if base_negative:
@@ -140,7 +159,7 @@ def generate_images(positive_prompt, negative_prompt=None, width=1024, height=10
 
         for node_id in negative_nodes:
             if node_id in workflow and "inputs" in workflow[node_id]:
-                workflow[node_id]["inputs"]["text"] = new_negative
+                _set_prompt_text(workflow[node_id]["inputs"], new_negative)
 
     # Actualizar resolución
     for node_id in latent_nodes:
